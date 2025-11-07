@@ -88,25 +88,58 @@ def constant_velocity_baseline(gt):
 
 #  Core Training Loop
 
-def evaluate_model(model, loader, device, eval_samples=200):
+def evaluate_model(model, loader, device, eval_samples=200, pred_len=None, stage_idx=None):
+    """
+    Evaluate model on validation set with optional curriculum context.
+    Handles both LSTM and Transformer models safely.
+    """
     model.eval()
     preds_all, gts_all = [], []
+
     with torch.no_grad():
         for i, sample in enumerate(loader.dataset):
             if i >= eval_samples:
                 break
+
+            # Load features
             target = torch.from_numpy(sample['target_feats']).unsqueeze(0).to(device)
             neigh_dyn = torch.from_numpy(sample['neighbors_dyn']).unsqueeze(0).to(device)
             neigh_spatial = torch.from_numpy(sample['neighbors_spatial']).unsqueeze(0).to(device)
             lane = torch.from_numpy(sample['lane_feats']).unsqueeze(0).to(device)
             gt = sample['gt']
-            pred = model(target, neigh_dyn, neigh_spatial, lane, pred_len=model.pred_len)[0].cpu().numpy()
+
+            # Determine last observed position (for residual CV baseline)
+            last_obs_pos = torch.zeros(1, 2, device=device)
+            if target.shape[1] >= 2:
+                last_obs_pos = target[:, -1, :2]
+
+            # Forward pass
+            if "train_stage" in model.forward.__code__.co_varnames:
+                # Transformer with teacher-forced CV warmup support
+                pred = model(
+                    target, neigh_dyn, neigh_spatial, lane,
+                    last_obs_pos=last_obs_pos,
+                    pred_len=pred_len,
+                    train_stage=stage_idx + 1 if stage_idx is not None else None
+                )[0].cpu().numpy()
+            else:
+                # LSTM baseline (no warmup argument)
+                pred = model(
+                    target, neigh_dyn, neigh_spatial, lane,
+                    pred_len=pred_len
+                )[0].cpu().numpy()
+
             preds_all.append(pred)
             gts_all.append(gt)
-    preds_all = np.stack(preds_all)
-    gts_all = np.stack(gts_all)
+
+    # Stack predictions and ground truths safely
+    preds_all = np.stack(preds_all, axis=0)
+    gts_all = np.stack(gts_all, axis=0)
+
+    # Compute all metrics
     metrics = compute_comprehensive_metrics(preds_all, gts_all)
     return metrics, preds_all, gts_all
+
 
 def train_loop(tracks_df, save_dir='./results/checkpoints',
                model_type='transformer', curriculum=None,

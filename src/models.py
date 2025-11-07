@@ -107,104 +107,96 @@ class MultichannelAttention(nn.Module):
 
 class ImprovedTrajectoryTransformer(nn.Module):
     """
-    Architecture closer to paper:
+    Architecture:
     1. Multichannel attention for vehicle dynamics, spatial relations, map features
     2. Transformer encoder for sequence modeling
-    3. Decoder that outputs ABSOLUTE positions (not deltas) using autoregressive attention
+    3. Decoder that outputs ABSOLUTE positions (not deltas)
+    4. Optional: teacher-forced constant-velocity residual warm-up
     """
-    def __init__(self, d_model=256, nhead=8, num_layers=4, pred_len=25, k_neighbors=8):
+    def __init__(self, d_model=256, nhead=8, num_layers=4, pred_len=25, k_neighbors=8,
+                 use_cv_warmup=True):   # <-- new toggle
         super().__init__()
         self.d_model = d_model
         self.pred_len = pred_len
-        
+        self.use_cv_warmup = use_cv_warmup
+
         # Feature projections
         self.target_proj = nn.Linear(7, d_model)
         self.neigh_dyn_proj = nn.Linear(7, d_model)
         self.neigh_spatial_proj = nn.Linear(18, d_model)
         self.lane_proj = nn.Linear(1, d_model)
-        
-        # Multichannel attention (paper Eq. 1-4)
+
+        # Multichannel attention
         self.multi_att = MultichannelAttention([d_model, d_model, d_model, d_model], d_model)
-        
-        # Neighbor aggregation with attention
+
+        # Positional + encoder/decoder
         self.neigh_attention = nn.MultiheadAttention(d_model, nhead, batch_first=True)
-        
-        # Positional encoding
         self.pos_enc = PositionalEncoding(d_model)
-        
-        # Transformer encoder (paper uses 8 heads as mentioned)
+
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model, nhead, dim_feedforward=4*d_model, dropout=0.1, batch_first=True, norm_first=True
-        )
+            d_model, nhead, dim_feedforward=4*d_model, dropout=0.1,
+            batch_first=True, norm_first=True)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers)
-        
-        # Decoder: autoregressive with cross-attention to encoder
+
         decoder_layer = nn.TransformerDecoderLayer(
-            d_model, nhead, dim_feedforward=4*d_model, dropout=0.1, batch_first=True, norm_first=True
-        )
+            d_model, nhead, dim_feedforward=4*d_model, dropout=0.1,
+            batch_first=True, norm_first=True)
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers)
-        
-        # Output head: predict ABSOLUTE position at each step
+
         self.output_head = nn.Sequential(
             nn.Linear(d_model, d_model // 2),
             nn.ReLU(),
             nn.Linear(d_model // 2, 2)
         )
-        
-        # Learnable query embeddings for decoder
+
         self.query_embed = nn.Embedding(pred_len, d_model)
         self.pos_embed_dec = PositionalEncoding(d_model, max_len=pred_len)
-        
-    def forward(self, target, neigh_dyn, neigh_spatial, lane, last_obs_pos=None, pred_len=None):
+
+    def forward(self, target, neigh_dyn, neigh_spatial, lane,
+                last_obs_pos=None, pred_len=None, train_stage=None):
         """
         target: (B, T_obs, 7)
         neigh_dyn: (B, K, T_obs, 7)
         neigh_spatial: (B, K, T_obs, 18)
         lane: (B, T_obs, 1)
-        last_obs_pos: (B, 2) - last observed position in agent frame (typically [0,0])
-        pred_len: int - override prediction length (for curriculum training)
-        
-        Returns: (B, T_pred, 2) ABSOLUTE positions in agent frame
+        last_obs_pos: (B, 2)
+        pred_len: override
+        train_stage: optional int for curriculum stage (1,2,3,...)
         """
         B, T_obs = target.size(0), target.size(1)
         K = neigh_dyn.size(1)
-        
-        # Use provided pred_len or default
         current_pred_len = pred_len if pred_len is not None else self.pred_len
-        
-        # Project features
-        target_feat = self.target_proj(target)  # (B, T, D)
-        lane_feat = self.lane_proj(lane)  # (B, T, D)
-        
-        # Aggregate neighbors: pool dynamic and spatial separately
+
+        # Project & fuse features
+        target_feat = self.target_proj(target)
+        lane_feat = self.lane_proj(lane)
         neigh_dyn_flat = neigh_dyn.view(B, K*T_obs, 7)
         neigh_dyn_proj = self.neigh_dyn_proj(neigh_dyn_flat).view(B, K, T_obs, self.d_model)
-        neigh_dyn_agg = neigh_dyn_proj.mean(dim=1)  # (B, T, D)
-        
+        neigh_dyn_agg = neigh_dyn_proj.mean(dim=1)
         neigh_spatial_flat = neigh_spatial.view(B, K*T_obs, 18)
         neigh_spatial_proj = self.neigh_spatial_proj(neigh_spatial_flat).view(B, K, T_obs, self.d_model)
-        neigh_spatial_agg = neigh_spatial_proj.mean(dim=1)  # (B, T, D)
-        
-        # Multichannel attention fusion (paper's key innovation)
-        fused = self.multi_att(target_feat, neigh_dyn_agg, neigh_spatial_agg, lane_feat)  # (B, T, D)
-        
-        # Add positional encoding and encode
+        neigh_spatial_agg = neigh_spatial_proj.mean(dim=1)
+
+        fused = self.multi_att(target_feat, neigh_dyn_agg, neigh_spatial_agg, lane_feat)
         fused = self.pos_enc(fused)
-        memory = self.encoder(fused)  # (B, T_obs, D)
-        
-        # Decoder: generate query sequence (use current_pred_len, not self.pred_len)
-        queries = self.query_embed.weight[:current_pred_len].unsqueeze(0).repeat(B, 1, 1)  # (B, current_pred_len, D)
+        memory = self.encoder(fused)
+
+        # Decoder queries
+        queries = self.query_embed.weight[:current_pred_len].unsqueeze(0).repeat(B, 1, 1)
         queries = self.pos_embed_dec(queries)
-        
-        # Autoregressive decoding with causal mask (MUST match current_pred_len)
         tgt_mask = nn.Transformer.generate_square_subsequent_mask(current_pred_len).to(queries.device)
-        decoded = self.decoder(queries, memory, tgt_mask=tgt_mask)  # (B, current_pred_len, D)
-        
-        # Output absolute positions
-        preds = self.output_head(decoded)  # (B, current_pred_len, 2)
-        
-        # If last_obs_pos provided, predictions are relative to that (but typically [0,0] in agent frame)
-        if last_obs_pos is not None:
+        decoded = self.decoder(queries, memory, tgt_mask=tgt_mask)
+        preds = self.output_head(decoded)  # (B, T_pred, 2)
+
+        # ---  Teacher-forced CV Residual Warm-up (3 lines) ---
+        if self.training and self.use_cv_warmup and (train_stage == 1 or train_stage is None):
+            # estimate constant-velocity baseline from last two obs
+            v_last = target[:, -1, :2] - target[:, -2, :2]       # (B,2)
+            t = torch.arange(1, current_pred_len+1, device=target.device).float().view(1, -1, 1)
+            cv_baseline = last_obs_pos.unsqueeze(1) + t * v_last.unsqueeze(1)  # (B,T,2)
+            preds = preds + cv_baseline  # learn residual around CV baseline
+        elif last_obs_pos is not None:
             preds = preds + last_obs_pos.unsqueeze(1)
-        
+        # -------------------------------------------------------
+
         return preds
