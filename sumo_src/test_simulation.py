@@ -37,10 +37,12 @@ def test_simulation():
                     vehID=vehicle_id,
                     routeID="platoon_route",
                     typeID=vehicle_type,
-                    departSpeed=speed,
+                    departSpeed=8,      # spawn slow
                     departPos=10,
                     departLane=lane,
                 )
+                traci.vehicle.setMaxSpeed(vehicle_id, 10)     # clamp max to 10 m/s
+                traci.vehicle.setSpeed(vehicle_id, 8)         # hold initial lower speed
                 vehicles_added += 1
                 print(f"Added vehicle {vehicle_id} on lane {lane}")
             except Exception as e:

@@ -121,7 +121,7 @@ def aggregate_vehicles(tracks_meta):
     for vid, data in tracks_meta.items():
         if data.get("found"):
             data["id"] = vid
-            frame = data["initialFrame"]
+            frame = int(data['initialFrame'] / 25 * 4)
             vehicles_to_enter.setdefault(frame, []).append(data)
     return vehicles_to_enter
 
@@ -213,9 +213,11 @@ def main(demo_mode=False, real_engine=False, setter=None):
 
     print("Starting SUMO with:", " ".join(sumo_cmd))
     traci.start(sumo_cmd)
+    safe_add_vehicle("debug0", "E0", 1, random.choice(AVAILABLE_CAR_TYPES))
 
     # write telemetry on the first main edge if present, else skip
-    telem_edge = "E0" if traci.edge.exists("E0") else None
+    telem_edge = "E0" if "E0" in traci.edge.getIDList() else None
+
 
     # prepare CSV
     out_file, writer = init_csv_file("sim_out/telemetry.csv")
