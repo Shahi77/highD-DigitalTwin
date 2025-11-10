@@ -13,6 +13,7 @@
                layer="-1"
                screenRelative="0"/>
     </scheme>
-    <viewport zoom="500" x="2000" y="10" angle="0"/>
+    <!-- Adjusted viewport to show both highways -->
+    <viewport zoom="400" x="2000" y="10" angle="0"/>
     <delay value="20"/>
 </viewsettings>

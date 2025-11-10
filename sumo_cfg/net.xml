@@ -1,11 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <net version="1.9" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
-    <location netOffset="0.00,0.00" convBoundary="-1000.00,0.00,5000.00,100.00" origBoundary="-10000000000.00,-10000000000.00,10000000000.00,10000000000.00" projParameter="!"/>
+    <location netOffset="0.00,0.00" convBoundary="-1000.00,-20.00,5000.00,40.00" origBoundary="-10000000000.00,-10000000000.00,10000000000.00,10000000000.00" projParameter="!"/>
+    
+    <!-- Upper highway: Direction 1 (Left to Right) -->
     <edge id="E0" from="J0" to="J1" priority="-1" length="6000.00">
-        <lane id="E0_0" index="0" speed="44.44" length="6000.00" shape="-1000.00,7.00 5000.00,7.00"/>
-        <lane id="E0_1" index="1" speed="44.44" length="6000.00" shape="-1000.00,10.20 5000.00,10.20"/>
-        <lane id="E0_2" index="2" speed="44.44" length="6000.00" shape="-1000.00,13.40 5000.00,13.40"/>
+        <lane id="E0_0" index="0" speed="44.44" length="6000.00" shape="-1000.00,27.00 5000.00,27.00"/>
+        <lane id="E0_1" index="1" speed="44.44" length="6000.00" shape="-1000.00,30.20 5000.00,30.20"/>
+        <lane id="E0_2" index="2" speed="44.44" length="6000.00" shape="-1000.00,33.40 5000.00,33.40"/>
     </edge>
-    <junction id="J0" type="dead_end" x="-1000.00" y="10.00" incLanes="" intLanes="" shape="-1000.00,14.80 -1000.00,5.60"/>
-    <junction id="J1" type="dead_end" x="5000.00" y="10.00" incLanes="E0_0 E0_1 E0_2" intLanes="" shape="5000.00,5.60 5000.00,14.80"/>
+    
+    <!-- Lower highway: Direction 2 (Right to Left) -->
+    <edge id="E1" from="J3" to="J2" priority="-1" length="6000.00">
+        <lane id="E1_0" index="0" speed="44.44" length="6000.00" shape="5000.00,-13.00 -1000.00,-13.00"/>
+        <lane id="E1_1" index="1" speed="44.44" length="6000.00" shape="5000.00,-9.80 -1000.00,-9.80"/>
+        <lane id="E1_2" index="2" speed="44.44" length="6000.00" shape="5000.00,-6.60 -1000.00,-6.60"/>
+    </edge>
+    
+    <!-- Junctions for upper highway -->
+    <junction id="J0" type="dead_end" x="-1000.00" y="30.00" incLanes="" intLanes="" shape="-1000.00,34.80 -1000.00,25.60"/>
+    <junction id="J1" type="dead_end" x="5000.00" y="30.00" incLanes="E0_0 E0_1 E0_2" intLanes="" shape="5000.00,25.60 5000.00,34.80"/>
+    
+    <!-- Junctions for lower highway -->
+    <junction id="J2" type="dead_end" x="-1000.00" y="-10.00" incLanes="E1_0 E1_1 E1_2" intLanes="" shape="-1000.00,-5.20 -1000.00,-14.40"/>
+    <junction id="J3" type="dead_end" x="5000.00" y="-10.00" incLanes="" intLanes="" shape="5000.00,-14.40 5000.00,-5.20"/>
 </net>

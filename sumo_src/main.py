@@ -85,7 +85,7 @@ def gene_config():
 
 
 def trajectory_tracking():
-    """Load highD trajectory data"""
+    """Load highD trajectory data for BOTH directions"""
     tracks_meta_path = "./data/highd/dataset/02_tracksMeta.csv"
     tracks_path = "./data/highd/dataset/02_tracks.csv"
 
@@ -94,10 +94,13 @@ def trajectory_tracking():
         with open(tracks_meta_path, newline="") as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                if int(row["drivingDirection"]) == 1:
+                # Load BOTH directions (1 and 2)
+                direction = int(row["drivingDirection"])
+                if direction in [1, 2]:
                     tracks_meta[int(row["id"])] = {
                         "initialFrame": int(row["initialFrame"]),
                         "class": row["class"],
+                        "drivingDirection": direction,  # Store direction!
                     }
 
         with open(tracks_path, newline="") as csvfile:
@@ -121,15 +124,13 @@ def trajectory_tracking():
 
 
 def aggregate_vehicles(tracks_meta):
-    """Convert highD frames to simulation steps"""
+    """Convert highD frames to simulation steps, separated by direction"""
     vehicles_to_enter = {}
     for vid, data in tracks_meta.items():
         if data.get("found"):
             data["id"] = vid
-            # highD is 25 Hz, our sim is 4 Hz (step-length=0.25, so 4 steps per second)
-            # So frame 25 in highD = 1 second = 4 simulation steps
             frame = data["initialFrame"]
-            sim_step = int(frame / 25 * 4)  # Convert 25Hz to 4Hz
+            sim_step = int(frame / 25 * 4)
             
             if sim_step not in vehicles_to_enter:
                 vehicles_to_enter[sim_step] = []
@@ -147,7 +148,13 @@ def main(demo_mode=True, real_engine=False, setter=None):
     tracks_meta = trajectory_tracking()
     vehicles_to_enter = aggregate_vehicles(tracks_meta)
     
+    # Count vehicles by direction
+    dir1_count = sum(1 for v in tracks_meta.values() if v.get("drivingDirection") == 1)
+    dir2_count = sum(1 for v in tracks_meta.values() if v.get("drivingDirection") == 2)
+    
     print(f"Loaded {len(tracks_meta)} vehicles from highD dataset")
+    print(f"  Direction 1 (upper highway): {dir1_count} vehicles")
+    print(f"  Direction 2 (lower highway): {dir2_count} vehicles")
     print(f"Vehicles will enter over {len(vehicles_to_enter)} simulation steps")
     
     # Setup simulation directory
@@ -160,11 +167,14 @@ def main(demo_mode=True, real_engine=False, setter=None):
     times = 0
     random.seed(7)
     
-    # Initialize CSV output
-    f1, before_writer = init_csv_file(cfg_file + "/data/sumo.csv")
+    # Initialize CSV outputs for both directions
+    f1, writer_dir1 = init_csv_file(cfg_file + "/data/sumo_direction1.csv")
+    f2, writer_dir2 = init_csv_file(cfg_file + "/data/sumo_direction2.csv")
     
     vehicles_added = 0
     vehicles_failed = 0
+    vehicles_dir1 = 0
+    vehicles_dir2 = 0
     
     print("Starting simulation...")
     print(f"Will run for {TOTAL_TIME} timesteps (~{TOTAL_TIME/4/3600:.1f} hours sim time)")
@@ -176,9 +186,12 @@ def main(demo_mode=True, real_engine=False, setter=None):
             # End simulation
             if demo_mode and times == TOTAL_TIME:
                 print(f"\nSimulation complete!")
-                print(f"Vehicles added: {vehicles_added}")
+                print(f"Direction 1 vehicles: {vehicles_dir1}")
+                print(f"Direction 2 vehicles: {vehicles_dir2}")
+                print(f"Total vehicles added: {vehicles_added}")
                 print(f"Vehicles failed: {vehicles_failed}")
                 f1.close()
+                f2.close()
                 
                 # Copy results
                 result_dir = "../data/" + cfg_file
@@ -190,9 +203,10 @@ def main(demo_mode=True, real_engine=False, setter=None):
                 traci.close()
                 break
             
-            # Collect vehicle data every 4th timestep (every simulated second)
+            # Collect vehicle data every 4th timestep
             if times > START_STEP and times % 4 == 0:
-                get_veh_info("E0", before_writer, times)
+                get_veh_info("E0", writer_dir1, times)  # Upper highway
+                get_veh_info("E1", writer_dir2, times)  # Lower highway
             
             # Add vehicles from highD dataset
             if times > START_STEP and times % 4 == 0:
@@ -206,10 +220,10 @@ def main(demo_mode=True, real_engine=False, setter=None):
                         # Select appropriate vehicle type
                         if "truck" in vehicle_class or "bus" in vehicle_class:
                             type_id = random.choice(AVAILABLE_TRUCK_TYPES)
-                            depart_speed = random.uniform(24, 25)  # Trucks slower
+                            depart_speed = random.uniform(24, 25)
                         else:
                             type_id = random.choice(AVAILABLE_CAR_TYPES)
-                            depart_speed = random.uniform(31, 33)  # Cars faster
+                            depart_speed = random.uniform(31, 33)
                         
                         # Map highD lanes (1-3) to SUMO lanes (0-2)
                         lane_id = max(0, min(2, int(data.get("laneId", 1)) - 1))
@@ -217,12 +231,22 @@ def main(demo_mode=True, real_engine=False, setter=None):
                         # Starting position
                         depart_pos = random.uniform(10, 30)
                         
-                        vehicle_id = str(data["id"])
+                        # Get driving direction and assign appropriate route
+                        direction = data.get("drivingDirection", 1)
+                        
+                        if direction == 1:
+                            route_id = "route_direction1"  # Upper highway (left to right)
+                            vehicle_id = f"d1_{data['id']}"
+                            vehicles_dir1 += 1
+                        else:  # direction == 2
+                            route_id = "route_direction2"  # Lower highway (right to left)
+                            vehicle_id = f"d2_{data['id']}"
+                            vehicles_dir2 += 1
                         
                         try:
                             traci.vehicle.add(
                                 vehID=vehicle_id,
-                                routeID="platoon_route",
+                                routeID=route_id,
                                 typeID=type_id,
                                 departSpeed=depart_speed,
                                 departPos=depart_pos,
@@ -237,19 +261,19 @@ def main(demo_mode=True, real_engine=False, setter=None):
                             
                         except traci.exceptions.TraCIException as e:
                             vehicles_failed += 1
-                            if vehicles_failed <= 10:  # Only print first 10 errors
+                            if vehicles_failed <= 10:
                                 print(f"Failed to add vehicle {vehicle_id}: {e}")
                         except Exception as e:
                             vehicles_failed += 1
                             if vehicles_failed <= 10:
                                 print(f"Unexpected error adding vehicle {vehicle_id}: {e}")
             
-            # Progress indicator every 1000 timesteps
+            # Progress indicator
             if times % 1000 == 0 and times > 0:
                 current_vehicles = len(traci.vehicle.getIDList())
-                print(f"Step {times} ({times/4:.0f}s sim time): "
+                print(f"Step {times} ({times/4:.0f}s): "
                       f"{current_vehicles} vehicles active, "
-                      f"{vehicles_added} added, {vehicles_failed} failed")
+                      f"Dir1: {vehicles_dir1}, Dir2: {vehicles_dir2}")
             
             times += 1
     
@@ -262,6 +286,7 @@ def main(demo_mode=True, real_engine=False, setter=None):
     finally:
         try:
             f1.close()
+            f2.close()
         except:
             pass
         try:
@@ -270,6 +295,8 @@ def main(demo_mode=True, real_engine=False, setter=None):
             pass
     
     print("\nSimulation ended")
+    print(f"Direction 1 vehicles: {vehicles_dir1}")
+    print(f"Direction 2 vehicles: {vehicles_dir2}")
     print(f"Total vehicles added: {vehicles_added}")
     print(f"Total vehicles failed: {vehicles_failed}")
 
