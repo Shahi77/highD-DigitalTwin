@@ -12,8 +12,31 @@
                rotation="0"
                layer="-1"
                screenRelative="0"/>
+   <!-- Visualization settings for better view -->
+        <vehicles vehicleQuality="2" 
+                  vehicleSize="1.5" 
+                  vehicleText.show="1"
+                  vehicleText.size="20"/>
+        
+        <!-- Road markings -->
+        <edge edgeWidth="1.2" 
+              edgeName.show="0"/>
+        
+        <legend showSizeLegend="0"/>
     </scheme>
-    <!-- Adjusted viewport to show both highways -->
-    <viewport zoom="400" x="2000" y="10" angle="0"/>
+    
+    <!-- VIEWPORT SETTINGS - Adjust these for your screen -->
+    <!-- Lower zoom (e.g., 150) = see more road, smaller vehicles -->
+    <!-- Higher zoom (e.g., 600) = see less road, bigger vehicles -->
+    
+    <!-- Wide view (good for 1920x1080 screens) -->
+    <viewport zoom="180" x="2000" y="10" angle="0"/>
+    
+    <!-- Alternative: Close-up view -->
+    <!-- <viewport zoom="500" x="2000" y="10" angle="0"/> -->
+    
+    <!-- Alternative: Follow traffic view -->
+    <!-- <viewport zoom="300" x="1000" y="10" angle="0"/> -->
+    
     <delay value="20"/>
 </viewsettings>
