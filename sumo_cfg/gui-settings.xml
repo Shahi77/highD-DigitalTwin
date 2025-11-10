@@ -2,6 +2,16 @@
 <viewsettings>
     <scheme name="real world">
         <opengl antialiase="1" dither="1"/>
+        <background backgroundColor="82,82,82" showGrid="0" gridXSize="100" gridYSize="100"/>
+        <!-- Add the highD highway image as background -->
+        <decal filename="/Users/shahi/Developer/Project-highD/data/highd/dataset/02_highway.png" 
+               centerX="2000" 
+               centerY="10" 
+               width="6000" 
+               height="50" 
+               rotation="0"
+               layer="-1"
+               screenRelative="0"/>
     </scheme>
     <viewport zoom="500" x="2000" y="10" angle="0"/>
     <delay value="20"/>
