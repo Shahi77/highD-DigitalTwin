@@ -35,9 +35,10 @@ class Config:
     K_NEIGHBORS = 8  # Number of neighbors (must match training)
     
     # Visualization settings
-    PREDICT_EVERY_N_STEPS = 4  # Make predictions every 4 simulation steps (1 second)
-    MAX_PREDICTIONS_SHOWN = 5  # Show predictions for N vehicles at a time
+    PREDICT_EVERY_N_STEPS = 8  # Make predictions every 8 steps (2 seconds)
+    MAX_PREDICTIONS_SHOWN = 5  # Show predictions for 5 vehicles at a time
     DRAW_PREDICTIONS = True  # Draw prediction lines in SUMO GUI
+    DRAW_OBSERVATION = False  # Don't draw observation history (like reference image)
     
     # Simulation settings
     GUI = True
@@ -68,7 +69,7 @@ def load_model(model_path, model_type="slstm", pred_len=25):
     model.to(device)
     model.eval()
     
-    print(f" Loaded {model_type.upper()} model from checkpoint")
+    print(f"✓ Loaded {model_type.upper()} model from checkpoint")
     print(f"  Model expects k={model.k} neighbors")
     return model
 
@@ -137,6 +138,27 @@ class PredictionVisualizer:
         self.pred_len = pred_len
         self.k = k
         self.active_predictions = {}  # vehicle_id -> prediction data
+        self.drawn_polygons = set()  # Track which polygons actually exist
+    
+    def _safe_remove_polygon(self, poly_id):
+        """Safely remove a polygon only if it exists"""
+        if poly_id in self.drawn_polygons:
+            try:
+                traci.polygon.remove(poly_id)
+                self.drawn_polygons.remove(poly_id)
+            except:
+                # If removal fails, still remove from tracking
+                self.drawn_polygons.discard(poly_id)
+    
+    def _safe_add_polygon(self, poly_id, points, color, layer, lineWidth):
+        """Safely add a polygon, removing old one first if exists"""
+        self._safe_remove_polygon(poly_id)
+        try:
+            traci.polygon.add(poly_id, points, color=color, fill=False, 
+                            layer=layer, lineWidth=lineWidth)
+            self.drawn_polygons.add(poly_id)
+        except Exception as e:
+            pass  # Silently fail if polygon can't be added
         
     def make_prediction(self, vehicle_id):
         """Make trajectory prediction for a vehicle"""
@@ -173,222 +195,116 @@ class PredictionVisualizer:
     def update_predictions(self, vehicle_ids):
         """Update predictions for active vehicles"""
         # Remove predictions for vehicles that no longer exist
-        for vid in list(self.active_predictions.keys()):
+        vehicles_to_remove = []
+        for vid in self.active_predictions.keys():
             if vid not in vehicle_ids:
-                del self.active_predictions[vid]
+                vehicles_to_remove.append(vid)
         
-        # Make predictions for vehicles with enough history
-        count = 0
-        for vid in vehicle_ids:
-            if count >= Config.MAX_PREDICTIONS_SHOWN:
-                break
-            
-            if self.tracker.has_enough_history(vid):
-                pred = self.make_prediction(vid)
-                if pred is not None:
-                    try:
-                        current_pos = traci.vehicle.getPosition(vid)
-                        self.active_predictions[vid] = {
-                            'prediction': pred,
-                            'start_pos': current_pos,
-                            'timestamp': traci.simulation.getTime()
-                        }
-                        count += 1
-                    except:
-                        continue
-    
-    def draw_predictions(self):
-        """Draw prediction and ground truth trajectories as lines in SUMO GUI"""
-        if not Config.GUI or not Config.DRAW_PREDICTIONS:
-            return
+        for vid in vehicles_to_remove:
+            # Clean up polygons for this vehicle using safe removal
+            for prefix in ["pred_", "obs_", "gt_"]:
+                poly_id = f"{prefix}{vid}"
+                self._safe_remove_polygon(poly_id)
+            del self.active_predictions[vid]
         
-        for vid, data in self.active_predictions.items():
-            try:
-                # Check if vehicle still exists
-                if vid not in traci.vehicle.getIDList():
-                    continue
-                
-                # Highlight vehicle with prediction in CYAN (more visible)
-                traci.vehicle.setColor(vid, (0, 255, 255, 255))
-                
-                # Get current vehicle position and angle
+        # Make predictions for vehicles with enough history (limit to MAX shown)
+        eligible_vehicles = [vid for vid in vehicle_ids if self.tracker.has_enough_history(vid)]
+        
+        # Limit to MAX_PREDICTIONS_SHOWN
+        eligible_vehicles = eligible_vehicles[:Config.MAX_PREDICTIONS_SHOWN]
+        
+        for vid in eligible_vehicles:
+            pred = self.make_prediction(vid)
+            if pred is not None:
                 try:
                     current_pos = traci.vehicle.getPosition(vid)
-                    current_angle = traci.vehicle.getAngle(vid)
-                    current_speed = traci.vehicle.getSpeed(vid)
-                    lane_idx = traci.vehicle.getLaneIndex(vid)
+                    self.active_predictions[vid] = {
+                        'prediction': pred,
+                        'start_pos': current_pos,
+                        'timestamp': traci.simulation.getTime()
+                    }
                 except:
                     continue
-                
-                # Get prediction and observation
-                pred = data['prediction']
-                obs = self.tracker.get_observation(vid)
-                
-                if obs is None:
+    
+    def draw_predictions(self):
+        """Draw only predicted (green dotted) and true (red dotted) trajectories in SUMO GUI."""
+        if not Config.GUI or not Config.DRAW_PREDICTIONS:
+            return
+
+        for vid, data in self.active_predictions.items():
+            try:
+                if vid not in traci.vehicle.getIDList():
                     continue
-                
-                # Calculate lateral offset based on lane to separate trajectories visually
-                # Each lane gets a small offset perpendicular to direction
-                angle_rad = np.radians(90 - current_angle)
-                lateral_offset = 1.5  # meters offset per lane
-                offset_x = -np.sin(angle_rad) * lateral_offset * (lane_idx - 1)
-                offset_y = np.cos(angle_rad) * lateral_offset * (lane_idx - 1)
-                
-                # === Draw OBSERVATION line (YELLOW - Historical path) ===
-                # Use only last 10 points for clarity
-                obs_display_len = min(10, len(obs))
-                obs_points = []
-                for i in range(len(obs) - obs_display_len, len(obs), 2):  # Every 2nd point
-                    obs_points.append((obs[i, 0] + offset_x, obs[i, 1] + offset_y))
-                
-                if len(obs_points) > 1:
-                    poly_obs_id = f"obs_{vid}"
-                    try:
-                        traci.polygon.remove(poly_obs_id)
-                    except:
-                        pass
-                    
-                    # Create dotted effect by drawing small line segments
-                    for i in range(len(obs_points) - 1):
-                        segment_id = f"obs_{vid}_seg{i}"
-                        try:
-                            traci.polygon.remove(segment_id)
-                        except:
-                            pass
-                        traci.polygon.add(
-                            segment_id,
-                            [obs_points[i], obs_points[i + 1]],
-                            color=(255, 255, 0, 255),  # Yellow
-                            fill=False,
-                            layer=100,
-                            lineWidth=1.5
-                        )
-                
-                # === Draw PREDICTED trajectory line (GREEN - Model prediction) ===
-                # Limit prediction display to reasonable distance (e.g., 15 points = 3.75 seconds)
-                pred_display_len = min(15, self.pred_len)
-                
-                # Calculate absolute positions with lateral offset
+
+                # Highlight vehicle with cyan for visibility
+                traci.vehicle.setColor(vid, (0, 255, 255, 255))
+
+                # Get current state
+                current_pos = traci.vehicle.getPosition(vid)
+                current_angle = traci.vehicle.getAngle(vid)
+                current_speed = traci.vehicle.getSpeed(vid)
+
+                pred = data["prediction"]
+                if pred is None or len(pred) == 0:
+                    continue
+
+                # ========== Predicted trajectory (GREEN dotted) ==========
+                pred_display_len = min(self.pred_len, 25)
                 cumsum_x = np.cumsum(pred[:pred_display_len, 0])
                 cumsum_y = np.cumsum(pred[:pred_display_len, 1])
-                
-                pred_points = []
-                pred_points.append((current_pos[0] + offset_x, current_pos[1] + offset_y))
-                
-                # Add prediction points (every other point for dotted effect)
+                pred_points = [(current_pos[0], current_pos[1])]
+
+                # add spaced points for dotted effect
                 for i in range(0, len(cumsum_x), 2):
-                    pred_x = current_pos[0] + cumsum_x[i] + offset_x
-                    pred_y = current_pos[1] + cumsum_y[i] + offset_y
-                    pred_points.append((pred_x, pred_y))
-                
-                # Draw as dotted line (small segments)
-                for i in range(len(pred_points) - 1):
-                    segment_id = f"pred_{vid}_seg{i}"
-                    try:
-                        traci.polygon.remove(segment_id)
-                    except:
-                        pass
-                    traci.polygon.add(
-                        segment_id,
-                        [pred_points[i], pred_points[i + 1]],
-                        color=(0, 255, 0, 255),  # Green
-                        fill=False,
-                        layer=101,
-                        lineWidth=2.0
-                    )
-                
-                # === Draw GROUND TRUTH trajectory line (RED - Actual future path) ===
-                # Estimate future ground truth positions using constant velocity model
-                # Also limit to same display length as prediction
-                try:
-                    # Convert angle to radians (SUMO uses degrees from north, clockwise)
-                    angle_rad = np.radians(90 - current_angle)
-                    vx = current_speed * np.cos(angle_rad)
-                    vy = current_speed * np.sin(angle_rad)
-                    
-                    gt_points = []
-                    gt_points.append((current_pos[0] + offset_x, current_pos[1] + offset_y))
-                    
-                    dt = 0.25  # Time step (4 steps per second)
-                    
-                    # Generate ground truth points (every 2nd for dotted effect)
-                    for i in range(2, pred_display_len, 2):
-                        next_x = current_pos[0] + vx * dt * i + offset_x
-                        next_y = current_pos[1] + vy * dt * i + offset_y
-                        gt_points.append((next_x, next_y))
-                    
-                    # Draw as dashed line (red)
-                    for i in range(len(gt_points) - 1):
-                        segment_id = f"gt_{vid}_seg{i}"
-                        try:
-                            traci.polygon.remove(segment_id)
-                        except:
-                            pass
-                        traci.polygon.add(
-                            segment_id,
-                            [gt_points[i], gt_points[i + 1]],
-                            color=(255, 0, 0, 255),  # Red
-                            fill=False,
-                            layer=99,
-                            lineWidth=2.0
-                        )
-                except:
-                    pass
-                
+                    px = current_pos[0] + cumsum_x[i]
+                    py = current_pos[1] + cumsum_y[i]
+                    pred_points.append((px, py))
+
+                poly_pred_id = f"pred_{vid}"
+                self._safe_add_polygon(
+                    poly_pred_id,
+                    pred_points,
+                    color=(0, 255, 0, 255),
+                    layer=101,
+                    lineWidth=2.5
+                )
+
+                # ========== True trajectory (RED dotted) ==========
+                angle_rad = np.radians(90 - current_angle)
+                vx = current_speed * np.cos(angle_rad)
+                vy = current_speed * np.sin(angle_rad)
+                gt_points = [(current_pos[0], current_pos[1])]
+                dt = 0.25
+
+                for i in range(2, pred_display_len, 2):
+                    nx = current_pos[0] + vx * dt * i
+                    ny = current_pos[1] + vy * dt * i
+                    gt_points.append((nx, ny))
+
+                poly_gt_id = f"gt_{vid}"
+                self._safe_add_polygon(
+                    poly_gt_id,
+                    gt_points,
+                    color=(255, 0, 0, 255),
+                    layer=100,
+                    lineWidth=2.5
+                )
+
             except traci.exceptions.TraCIException:
                 continue
-            except Exception as e:
+            except Exception:
                 continue
 
-
     def clear_visualizations(self):
-        """Clear all drawn trajectories"""
-        try:
-            # Get all polygon IDs and remove trajectory-related ones
-            all_polygons = traci.polygon.getIDList()
-            for poly_id in all_polygons:
-                if any(prefix in poly_id for prefix in ["pred_", "obs_", "gt_"]):
-                    try:
-                        traci.polygon.remove(poly_id)
-                    except:
-                        pass
-        except:
-            pass
+        """Clear all drawn trajectories efficiently"""
+        if not Config.GUI:
+            return
         
-        try:
-            # Clear POIs as well
-            all_pois = traci.poi.getIDList()
-            for poi_id in all_pois:
-                if poi_id.startswith("pred_"):
-                    try:
-                        traci.poi.remove(poi_id)
-                    except:
-                        pass
-        except:
-            pass
+        # Remove all tracked polygons
+        for poly_id in list(self.drawn_polygons):
+            self._safe_remove_polygon(poly_id)
 
 
-    # Also update the Config class for better visualization control
-    class Config:
-        # Model settings
-        MODEL_TYPE = "slstm"  # or "transformer"
-        MODEL_PATH = "/Users/shahi/Developer/Project-highD/results/results_scene02_lstm/checkpoints/best_model.pt"
-        
-        # Prediction settings
-        OBS_LEN = 20  # Observation length (frames)
-        PRED_LEN = 25  # Prediction length (frames)
-        K_NEIGHBORS = 8  # Number of neighbors (must match training)
-        
-        # Visualization settings
-        PREDICT_EVERY_N_STEPS = 4  # Make predictions every 4 simulation steps (1 second)
-        MAX_PREDICTIONS_SHOWN = 3  # Show predictions for 3 vehicles at a time (reduced for clarity)
-        DRAW_PREDICTIONS = True  # Draw prediction lines in SUMO GUI
-        
-        # Simulation settings
-        GUI = True
-        TOTAL_TIME = 1000  # Run for limited time for testing
-        START_STEP = 100  # Start predictions after some vehicles are in
-        
 # ==================== Main Simulation with Predictions ====================
 def main_with_predictions():
     """Run SUMO simulation with trajectory predictions"""
@@ -500,10 +416,7 @@ def main_with_predictions():
             
             # Make predictions periodically
             if times > Config.START_STEP and times % Config.PREDICT_EVERY_N_STEPS == 0:
-                # Clear old visualizations
-                visualizer.clear_visualizations()
-                
-                # Update predictions
+                # Update predictions (this also cleans up old vehicles)
                 visualizer.update_predictions(vehicle_ids)
                 
                 # Draw predictions
@@ -516,7 +429,7 @@ def main_with_predictions():
             
             # End condition
             if times >= Config.TOTAL_TIME:
-                print("\n Simulation complete!")
+                print("\n✓ Simulation complete!")
                 break
             
             times += 1
@@ -540,61 +453,61 @@ def main_with_predictions():
 def visualize_static_predictions(csv_path, model_path, model_type="slstm", 
                                  num_samples=5, save_dir="./prediction_viz"):
     """
-    Create static visualizations comparing predictions vs ground truth
+    Create Digital Twin-style visualization: only predicted (green dotted)
+    and true (red dotted) trajectories, clean background, no observation line.
     """
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     import pandas as pd
-    
+    import os
+    import numpy as np
+    import torch
+
     os.makedirs(save_dir, exist_ok=True)
     
-    # Load model
+    # Load trained model
     model = load_model(model_path, model_type, Config.PRED_LEN)
     
     # Load CSV data
     df = pd.read_csv(csv_path)
-    
-    # Group by vehicle ID
     vehicle_groups = df.groupby('id')
     
-    print(f"\nGenerating {num_samples} prediction visualizations...")
+    print(f"\nGenerating {num_samples} Digital Twin-style visualizations...\n")
     
     sample_count = 0
     for vid, group in vehicle_groups:
         if sample_count >= num_samples:
             break
         
-        # Sort by frame
+        # Sort by frame order
         group = group.sort_values('frame')
-        
         if len(group) < Config.OBS_LEN + Config.PRED_LEN:
-            continue  # Not enough data
+            continue
         
-        # Extract observation and ground truth
+        # Extract observation and ground truth data
         obs_data = group.iloc[:Config.OBS_LEN]
         gt_data = group.iloc[Config.OBS_LEN:Config.OBS_LEN + Config.PRED_LEN]
         
         # Prepare observation tensor [obs_len, 7]
         obs = np.zeros((Config.OBS_LEN, 7))
         obs[:, 0] = obs_data['x'].values
-        obs[:, 1] = 0  # y position
+        obs[:, 1] = 0
         obs[:, 2] = obs_data['v'].values
-        obs[:, 3] = 0  # vy
+        obs[:, 3] = 0
         obs[:, 4] = obs_data['acc'].values if 'acc' in obs_data.columns else 0
-        obs[:, 5] = 0  # ay
+        obs[:, 5] = 0
         obs[:, 6] = obs_data['lane_index'].values
         
         obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
         
-        # Correct neighbor dimensions [batch, k, obs_len, 7]
+        # Dummy neighbor/lane data
         nd = torch.zeros(1, model.k, Config.OBS_LEN, 7).to(device)
         ns = torch.zeros(1, model.k, 2).to(device)
         lane = torch.zeros(1, 3).to(device)
         
-        # Make prediction
         try:
             with torch.no_grad():
-                if hasattr(model, "multi_att"):
+                if hasattr(model, "multi_att"):  # Transformer
                     last_obs_pos = obs_tensor[:, -1, :2]
                     pred = model(obs_tensor, nd, ns, lane, last_obs_pos=last_obs_pos)
                 else:
@@ -602,76 +515,62 @@ def visualize_static_predictions(csv_path, model_path, model_type="slstm",
             
             pred_np = pred.cpu().numpy()[0]
             
-            # Create visualization
+            # --- Create Digital Twin-style plot ---
             fig, ax = plt.subplots(figsize=(14, 6))
-            
-            # Draw road background
             road_width = 30
             lane_width = 10
+
+            # Road outline (no fill, just boundary)
             ax.add_patch(patches.Rectangle(
-                (obs[0, 0] - 50, -road_width/2), 
+                (obs[0, 0] - 50, -road_width / 2),
                 obs[-1, 0] - obs[0, 0] + 200,
                 road_width,
-                facecolor='#7f8c8d', edgecolor='black', linewidth=2
+                facecolor='none',
+                edgecolor='black',
+                linewidth=1.2
             ))
-            
-            # Lane markings
-            x_start = obs[0, 0] - 50
-            x_end = obs[-1, 0] + 150
-            for i in range(1, 3):
-                y_pos = -road_width/2 + i * lane_width
-                n_dashes = 20
-                dash_length = (x_end - x_start) / (2 * n_dashes)
-                for j in range(n_dashes):
-                    x_dash = x_start + j * 2 * dash_length
-                    ax.plot([x_dash, x_dash + dash_length], [y_pos, y_pos], 
-                           'w--', linewidth=2, alpha=0.8)
-            
+
+            # No lane markings, no observed trajectory
             lane_id = int(obs[0, 6])
-            lane_y = -road_width/2 + (lane_id + 0.5) * lane_width
-            
-            # Plot observation (yellow)
-            obs_x = obs[:, 0]
-            obs_y = np.full_like(obs_x, lane_y)
-            ax.plot(obs_x, obs_y, 'o-', color='#f1c40f', linewidth=3, 
-                   markersize=6, label='Observation', zorder=5)
-            
-            # Plot ground truth (red)
+            lane_y = -road_width / 2 + (lane_id + 0.5) * lane_width
+
+            # --- Ground Truth Trajectory (Red Dotted) ---
             gt_x = np.concatenate([obs[-1:, 0], gt_data['x'].values])
             gt_y = np.full_like(gt_x, lane_y)
-            ax.plot(gt_x, gt_y, 'o-', color='#e74c3c', linewidth=3, 
-                   markersize=6, label='Ground Truth', zorder=4, linestyle='--')
-            
-            # Plot prediction (green)
-            # Predictions are relative to last observation
+            ax.plot(gt_x, gt_y, color='#e74c3c', linestyle='--', linewidth=2.6,
+                    label='True trajectory', zorder=5)
+
+            # --- Predicted Trajectory (Green Dotted) ---
             pred_x = obs[-1, 0] + np.cumsum(np.concatenate([[0], pred_np[:, 0]]))
             pred_y = lane_y + np.cumsum(np.concatenate([[0], pred_np[:, 1]]))
-            ax.plot(pred_x, pred_y, 's-', color='#2ecc71', linewidth=3, 
-                   markersize=5, label='Prediction', zorder=6)
-            
-            # Styling
+            ax.plot(pred_x, pred_y, color='#2ecc71', linestyle='--', linewidth=2.6,
+                    label='Predicted trajectory', zorder=6)
+
+            # --- Styling for Digital Twin Look ---
             ax.set_xlim(obs[0, 0] - 50, max(gt_x[-1], pred_x[-1]) + 50)
-            ax.set_ylim(-road_width/2 - 5, road_width/2 + 5)
-            ax.set_aspect('equal')
+            ax.set_ylim(-road_width / 2 - 5, road_width / 2 + 5)
+            ax.set_aspect('equal', adjustable='box')
             ax.set_xlabel('X Position (m)', fontsize=13, fontweight='bold')
             ax.set_ylabel('Y Position (m)', fontsize=13, fontweight='bold')
-            ax.set_title(f'Vehicle {vid} - Trajectory Prediction', 
-                        fontsize=15, fontweight='bold')
+            ax.set_title(f'Vehicle {vid} – Digital Twin Trajectory Visualization',
+                         fontsize=15, fontweight='bold')
             ax.legend(loc='upper left', fontsize=12)
-            ax.grid(True, alpha=0.2)
-            
+            ax.grid(False)
             plt.tight_layout()
-            plt.savefig(os.path.join(save_dir, f'prediction_{vid}.png'), dpi=200)
+
+            # Save
+            out_path = os.path.join(save_dir, f'prediction_DT_{vid}.png')
+            plt.savefig(out_path, dpi=200)
             plt.close()
             
             sample_count += 1
-            print(f"  [{sample_count}/{num_samples}] Generated: prediction_{vid}.png")
-            
+            print(f"  [{sample_count}/{num_samples}] Saved: {out_path}")
+        
         except Exception as e:
             print(f"   Error with vehicle {vid}: {e}")
             continue
     
-    print(f"\n Saved {sample_count} visualizations to {save_dir}")
+    print(f"\n✓ Saved {sample_count} DT-style visualizations to {save_dir}\n")
 
 
 # ==================== Entry Point ====================
