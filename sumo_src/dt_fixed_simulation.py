@@ -48,9 +48,11 @@ class DTConfig:
     DRAW_PREDICTIONS: bool = True
     PRED_DISPLAY_LEN: int = 12  # Only show 3 seconds of prediction (12 frames @ 4Hz)
     LINE_SPACING: int = 3  # Every 3rd point for dotted effect
-    PRED_LINE_WIDTH: float = 2.5
-    TRUE_LINE_WIDTH: float = 2.5
-    MAX_PREDICTIONS_SHOWN: int = 10  # Show more vehicles
+    PRED_LINE_WIDTH: float = 1.0
+    TRUE_LINE_WIDTH: float = 1.0
+    PRED_DISPLAY_LEN: int = 8      # Shorter, ~2s
+    LINE_SPACING: int = 4          # More spaced/dotted
+    MAX_PREDICTIONS_SHOWN: int = 3 # Show only a few vehicles for clarity
     
     # Simulation settings
     GUI: bool = True
@@ -423,65 +425,61 @@ class DigitalTwinPredictor:
                 true_acc=gt_data['true_acc'][:display_len-1],
                 inference_time_ms=inference_time_ms
             )
-    
-    def draw_predictions(self):
-        """Draw clean, short, dotted trajectories"""
-        if not self.config.GUI or not self.config.DRAW_PREDICTIONS:
-            return
         
-        for vid, data in self.active_predictions.items():
-            try:
+    def draw_predictions(self):
+            """Draw truly dotted, separated, short trajectories for a few vehicles"""
+            if not self.config.GUI or not self.config.DRAW_PREDICTIONS:
+                return
+
+            offset = 1.0
+            # Remove previous polygons (all dots)
+            for poly_id in list(self.drawn_polygons):
+                self._safe_remove_polygon(poly_id)
+            # Draw new dots for each vehicle
+            for vid, data in self.active_predictions.items():
                 if vid not in traci.vehicle.getIDList():
                     continue
-                
-                # Highlight vehicle (cyan)
-                traci.vehicle.setColor(vid, (0, 255, 255, 255))
-                
                 current_pos = traci.vehicle.getPosition(vid)
                 pred = data['prediction']
                 gt_data = data['ground_truth']
-                
-                # Use shorter display length
                 display_len = min(self.config.PRED_DISPLAY_LEN, len(pred))
-                
-                # === GREEN DOTTED: Predicted trajectory ===
+
+                # Dotted green dots for predicted
                 pred_cumsum_x = np.cumsum(pred[:display_len, 0])
                 pred_cumsum_y = np.cumsum(pred[:display_len, 1])
-                pred_points = [(current_pos[0], current_pos[1])]
-                
                 for i in range(0, len(pred_cumsum_x), self.config.LINE_SPACING):
-                    px = current_pos[0] + pred_cumsum_x[i]
+                    px = current_pos[0] + pred_cumsum_x[i] + offset
                     py = current_pos[1] + pred_cumsum_y[i]
-                    pred_points.append((px, py))
-                
-                self._safe_add_polygon(
-                    f"pred_{vid}",
-                    pred_points,
-                    color=(0, 255, 0, 255),  # Green
-                    layer=101,
-                    lineWidth=self.config.PRED_LINE_WIDTH
-                )
-                
-                # === RED DOTTED: True trajectory ===
+                    dot_id = f"pred_dot_{vid}_{i}"
+                    # as a filled polygon with one point (SUMO docs: a circle for one pt)
+                    tiny = 0.5  # meters for dot size
+                    pts = [
+                        (px, py),
+                        (px+tiny, py),
+                        (px, py+tiny)
+                    ]
+                    traci.polygon.add(dot_id, pts, color=(0,255,0,255), fill=True, layer=101, lineWidth=3.0)
+                    self.drawn_polygons.add(dot_id)
+
+                # Dotted red dots for actual
                 gt_traj = gt_data['true_traj'][:display_len]
-                gt_points = [(current_pos[0], current_pos[1])]
-                
                 for i in range(0, len(gt_traj), self.config.LINE_SPACING):
-                    gx = current_pos[0] + gt_traj[i, 0]
+                    gx = current_pos[0] + gt_traj[i, 0] - offset
                     gy = current_pos[1] + gt_traj[i, 1]
-                    gt_points.append((gx, gy))
-                
-                self._safe_add_polygon(
-                    f"gt_{vid}",
-                    gt_points,
-                    color=(255, 0, 0, 255),  # Red
-                    layer=100,
-                    lineWidth=self.config.TRUE_LINE_WIDTH
-                )
-                
-            except:
-                continue
-    
+                    dot_id = f"gt_dot_{vid}_{i}"
+                    tiny = 0.5  # meters for dot size
+                    pts = [
+                        (px, py),
+                        (px+tiny, py),
+                        (px, py+tiny)
+                    ]
+                    traci.polygon.add(dot_id, pts, color=(0,255,0,255), fill=True, layer=101, lineWidth=3.0)
+                    self.drawn_polygons.add(dot_id)
+
+
+                # Optional: Color vehicle for easier ID
+                traci.vehicle.setColor(vid, (0,255,255,255))
+
     def clear_visualizations(self):
         """Clear all polygons"""
         if not self.config.GUI:
@@ -686,7 +684,7 @@ def run_dt_simulation(config: DTConfig):
 # ==================== Entry Point ====================
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Digital Twin SUMO Simulation")
     parser.add_argument("--mode", choices=["dt", "baseline"], default="dt",
                        help="Run with DT predictions or baseline replay")
@@ -697,10 +695,9 @@ if __name__ == "__main__":
     parser.add_argument("--total_time", type=int, default=4000)
     parser.add_argument("--pred_interval_ms", type=int, default=500,
                        help="Prediction interval in milliseconds")
-    
+
     args = parser.parse_args()
-    
-    # Update config
+
     config.USE_DT_PREDICTION = (args.mode == "dt")
     config.MODEL_PATH = args.model_path
     config.MODEL_TYPE = args.model_type
@@ -708,6 +705,5 @@ if __name__ == "__main__":
     config.TOTAL_TIME = args.total_time
     config.PREDICTION_INTERVAL_MS = args.pred_interval_ms
     config.METRICS_OUTPUT = f"./dt_metrics_{args.mode}.json"
-    
-    # Run simulation
+
     run_dt_simulation(config)
