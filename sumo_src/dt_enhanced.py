@@ -1,19 +1,15 @@
 """
-Fixed Digital Twin SUMO Simulation - Final Version
---------------------------------------------------
-- Proper coordinate transformation
-- Close-spaced dashed lines
-- Working metrics collection
-- Real-time predictions for all vehicles
+Digital Twin SUMO Simulation - CRITICAL FIXES FOR PROPER METRICS
+-----------------------------------------------------------------
+Key fixes:
+1. Apply same coordinate transformation as training (rotation normalization)
+2. Add velocity-based scaling for predictions
+3. Implement proper denormalization
+4. Add coordinate system validation
+5. Improve ground truth alignment
 """
 
-import os
-import sys
-import random
-import numpy as np
-import torch
-import time
-import json
+import os, sys, random, numpy as np, torch, time, json
 from collections import defaultdict, deque
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple, Optional
@@ -34,30 +30,27 @@ class DTConfig:
     OBS_LEN: int = 20
     PRED_LEN: int = 20
     K_NEIGHBORS: int = 8
+    
+    TRAINING_FREQ_HZ: int = 4
+    SUMO_STEP_MS: int = 1000
     PREDICTION_INTERVAL_MS: int = 500
+    MIN_GT_FRAMES: int = 8
+    MAX_GT_WAIT_STEPS: int = 100
     
-    # Visualization - much tighter, closer dashes
+    # CRITICAL: Coordinate system parameters
+    USE_ROTATION_NORMALIZATION: bool = True
+    VELOCITY_SCALE_FACTOR: float = 1.0  # Tune this based on training data
+    MAX_PREDICTION_DISTANCE: float = 200.0  # Sanity check (meters)
+    
     DRAW_PREDICTIONS: bool = True
-    PRED_DISPLAY_LEN: int = 8  # Shorter - 2 seconds only
-    DASH_LENGTH: float = 0.3  # Short dashes
-    DASH_GAP: float = 0.15  # Small gaps
-    LINE_WIDTH: float = 0.25  # Thinner
-    LATERAL_OFFSET: float = 0.35  # Very close to vehicle
-    
-    # Colors
-    PRED_LINE_COLOR: Tuple[int, int, int, int] = (0, 255, 0, 255)  # Green
-    TRUE_LINE_COLOR: Tuple[int, int, int, int] = (255, 0, 0, 255)  # Red
-    VEHICLE_COLOR: Tuple[int, int, int, int] = (255, 255, 0, 255)  # Yellow
-    
+    PRED_DISPLAY_LEN: int = 8
     GUI: bool = True
     TOTAL_TIME: int = 4000
     START_STEP: int = 100
-    USE_DT_PREDICTION: bool = True
-    METRICS_OUTPUT: str = "./dt_metrics_fixed.json"
+    METRICS_OUTPUT: str = "./dt_results/dt_metrics_v2.json"
 
 
 config = DTConfig()
-
 device = torch.device(
     "cuda" if torch.cuda.is_available()
     else "mps" if torch.backends.mps.is_available()
@@ -66,97 +59,56 @@ device = torch.device(
 
 
 @dataclass
-class EnhancedPredictionMetrics:
+class PredictionMetrics:
     vehicle_id: str
-    timestamp: float
+    prediction_step: int
     ade: float
     fde: float
-    mae: float
-    rmse: float
     inference_latency_ms: float
     e2e_latency_ms: float
-    speed_mae: float
-    acc_mae: float
-    frame_alignment: float
-    temporal_drift_ms: float
+    num_gt_frames: int
+    prediction_timestamp: float
+    pred_distance: float  # For debugging
 
 
-class EnhancedMetricsCollector:
+class SimpleMetricsCollector:
     def __init__(self, config: DTConfig):
         self.config = config
-        self.predictions: List[EnhancedPredictionMetrics] = []
-        self.latency_samples: List[float] = []
-        self.e2e_latency_samples: List[float] = []
-        self.frame_alignments: List[float] = []
-        self.temporal_drifts: List[float] = []
-        self.prediction_timestamps: List[float] = []
-        self.successful_predictions = 0
-        self.failed_predictions = 0
+        self.metrics: List[PredictionMetrics] = []
         self.start_time = time.time()
         
-    def add_prediction(self, vehicle_id: str, timestamp: float,
-                      pred_traj: np.ndarray, true_traj: np.ndarray,
-                      pred_speed: np.ndarray, true_speed: np.ndarray,
-                      pred_acc: np.ndarray, true_acc: np.ndarray,
-                      inference_time_ms: float, e2e_time_ms: float,
-                      frame_alignment: float, temporal_drift_ms: float):
-        
+    def add_metric(self, vehicle_id: str, prediction_step: int,
+                   pred_traj: np.ndarray, true_traj: np.ndarray,
+                   inference_ms: float, e2e_ms: float,
+                   timestamp: float):
+        """Add a single prediction metric"""
         displacements = np.linalg.norm(pred_traj - true_traj, axis=1)
-        ade = np.mean(displacements)
-        fde = displacements[-1]
-        mae = np.mean(np.abs(pred_traj - true_traj))
-        rmse = np.sqrt(np.mean((pred_traj - true_traj) ** 2))
+        ade = float(np.mean(displacements))
+        fde = float(displacements[-1])
+        pred_distance = float(np.linalg.norm(pred_traj[-1]))
         
-        speed_mae = np.mean(np.abs(pred_speed - true_speed))
-        acc_mae = np.mean(np.abs(pred_acc - true_acc))
-        
-        metrics = EnhancedPredictionMetrics(
-            vehicle_id=vehicle_id, timestamp=timestamp,
-            ade=ade, fde=fde, mae=mae, rmse=rmse,
-            inference_latency_ms=inference_time_ms,
-            e2e_latency_ms=e2e_time_ms,
-            speed_mae=speed_mae, acc_mae=acc_mae,
-            frame_alignment=frame_alignment,
-            temporal_drift_ms=temporal_drift_ms
+        metric = PredictionMetrics(
+            vehicle_id=vehicle_id,
+            prediction_step=prediction_step,
+            ade=ade,
+            fde=fde,
+            inference_latency_ms=inference_ms,
+            e2e_latency_ms=e2e_ms,
+            num_gt_frames=len(true_traj),
+            prediction_timestamp=timestamp,
+            pred_distance=pred_distance
         )
         
-        self.predictions.append(metrics)
-        self.latency_samples.append(inference_time_ms)
-        self.e2e_latency_samples.append(e2e_time_ms)
-        self.frame_alignments.append(frame_alignment)
-        self.temporal_drifts.append(temporal_drift_ms)
-        self.prediction_timestamps.append(timestamp)
-        self.successful_predictions += 1
+        self.metrics.append(metric)
     
-    def calculate_advanced_metrics(self) -> Dict:
-        if not self.predictions:
+    def get_summary(self) -> Dict:
+        if not self.metrics:
             return {}
         
-        ades = [p.ade for p in self.predictions]
-        fdes = [p.fde for p in self.predictions]
-        
-        latency_jitter = np.std(self.latency_samples) if len(self.latency_samples) > 1 else 0
-        far = np.mean(self.frame_alignments) if self.frame_alignments else 0
-        avg_temporal_drift = np.mean(self.temporal_drifts) if self.temporal_drifts else 0
-        
-        if len(self.prediction_timestamps) > 1:
-            intervals = np.diff(self.prediction_timestamps) * 1000
-            expected_interval = self.config.PREDICTION_INTERVAL_MS
-            usi = 1.0 - np.mean(np.abs(intervals - expected_interval) / expected_interval)
-            usi = max(0.0, min(1.0, usi))
-        else:
-            usi = 1.0
-        
-        prediction_refresh_rate = len(self.predictions) / (time.time() - self.start_time)
-        adaptation_success_ratio = self.successful_predictions / (
-            self.successful_predictions + self.failed_predictions
-        ) if (self.successful_predictions + self.failed_predictions) > 0 else 0
-        
-        accuracy_score = 1.0 / (1.0 + np.mean(ades))
-        dtci = 0.4 * accuracy_score + 0.3 * far + 0.3 * usi
-        
-        total_compute_time = sum(self.latency_samples) / 1000
-        ce = self.successful_predictions / total_compute_time if total_compute_time > 0 else 0
+        ades = [m.ade for m in self.metrics]
+        fdes = [m.fde for m in self.metrics]
+        inference_times = [m.inference_latency_ms for m in self.metrics]
+        pred_distances = [m.pred_distance for m in self.metrics]
         
         return {
             "trajectory_accuracy": {
@@ -168,38 +120,24 @@ class EnhancedMetricsCollector:
                 "FDE_median": float(np.median(fdes)),
             },
             "latency_metrics": {
-                "inference_latency_mean_ms": float(np.mean(self.latency_samples)),
-                "inference_latency_p95_ms": float(np.percentile(self.latency_samples, 95)),
-                "e2e_latency_mean_ms": float(np.mean(self.e2e_latency_samples)),
-                "latency_jitter_ms": float(latency_jitter),
+                "inference_mean_ms": float(np.mean(inference_times)),
+                "inference_p95_ms": float(np.percentile(inference_times, 95)),
             },
-            "synchronization_metrics": {
-                "frame_alignment_ratio": float(far),
-                "temporal_drift_mean_ms": float(avg_temporal_drift),
-                "update_synchrony_index": float(usi),
-            },
-            "responsiveness_metrics": {
-                "prediction_refresh_rate_hz": float(prediction_refresh_rate),
-                "adaptation_success_ratio": float(adaptation_success_ratio),
-            },
-            "composite_metrics": {
-                "digital_twin_coherence_index": float(dtci),
-                "computational_efficiency_pred_per_sec": float(ce),
-            },
-            "performance_summary": {
-                "total_predictions": self.successful_predictions,
-                "failed_predictions": self.failed_predictions,
-                "success_rate": float(adaptation_success_ratio),
+            "debug_stats": {
+                "avg_pred_distance": float(np.mean(pred_distances)),
+                "total_predictions": len(self.metrics),
             }
         }
     
     def save_results(self, filepath: str):
         os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else ".", exist_ok=True)
-        summary = self.calculate_advanced_metrics()
-        summary["raw_predictions_sample"] = [asdict(p) for p in self.predictions[-50:]]
+        summary = self.get_summary()
+        summary["raw_predictions"] = [asdict(m) for m in self.metrics[-100:]]
+        
         with open(filepath, 'w') as f:
             json.dump(summary, f, indent=2)
-        print(f"\n✓ Metrics saved to {filepath}")
+        
+        print(f"\n✅ Saved {len(self.metrics)} metrics to {filepath}")
 
 
 def load_model(model_path: str, model_type: str, pred_len: int):
@@ -216,73 +154,43 @@ def load_model(model_path: str, model_type: str, pred_len: int):
     return model
 
 
-class GroundTruthTracker:
-    def __init__(self, config: DTConfig):
-        self.config = config
-        self.future_trajectories = {}
-        
-    def start_tracking(self, vehicle_id: str, start_time: float):
-        if vehicle_id not in self.future_trajectories:
-            self.future_trajectories[vehicle_id] = {}
-        self.future_trajectories[vehicle_id][start_time] = []
-    
-    def update_position(self, vehicle_id: str, position: Tuple[float, float], 
-                       speed: float, acceleration: float):
-        if vehicle_id not in self.future_trajectories:
-            return
-        
-        for start_time in list(self.future_trajectories[vehicle_id].keys()):
-            self.future_trajectories[vehicle_id][start_time].append({
-                'pos': position, 'speed': speed, 'acc': acceleration
-            })
-    
-    def get_ground_truth(self, vehicle_id: str, start_time: float, 
-                        start_pos: Tuple[float, float]) -> Optional[Dict]:
-        if (vehicle_id not in self.future_trajectories or 
-            start_time not in self.future_trajectories[vehicle_id]):
-            return None
-        
-        traj_data = self.future_trajectories[vehicle_id][start_time]
-        if len(traj_data) < self.config.PRED_LEN:
-            return None
-        
-        # Convert to RELATIVE coordinates
-        true_traj = np.zeros((self.config.PRED_LEN, 2))
-        true_speeds = np.zeros(self.config.PRED_LEN)
-        true_accs = np.zeros(self.config.PRED_LEN)
-        
-        for i in range(self.config.PRED_LEN):
-            true_traj[i, 0] = traj_data[i]['pos'][0] - start_pos[0]
-            true_traj[i, 1] = traj_data[i]['pos'][1] - start_pos[1]
-            true_speeds[i] = traj_data[i]['speed']
-            true_accs[i] = traj_data[i]['acc']
-        
-        del self.future_trajectories[vehicle_id][start_time]
-        
-        return {
-            'trajectory': true_traj,
-            'speeds': true_speeds,
-            'accelerations': true_accs
-        }
-
-
 class TrajectoryTracker:
-    def __init__(self, obs_len: int = 20):
+    """Track historical trajectories with proper coordinate handling"""
+    def __init__(self, obs_len: int = 20, use_rotation_norm: bool = True):
         self.obs_len = obs_len
+        self.use_rotation_norm = use_rotation_norm
         self.trajectories = defaultdict(lambda: deque(maxlen=obs_len))
-        self.last_prediction_time = {}
+        self.last_sample_time = defaultdict(float)
+        
+    def should_sample(self, vehicle_id: str, current_time_s: float, freq_hz: int = 4) -> bool:
+        if vehicle_id not in self.last_sample_time:
+            return True
+        elapsed = current_time_s - self.last_sample_time[vehicle_id]
+        return elapsed >= (1.0 / freq_hz)
         
     def update(self, vehicle_id: str, position: Tuple[float, float], 
-               velocity: float, acceleration: float, lane_id: int):
-        self.trajectories[vehicle_id].append({
-            'x': position[0], 'y': position[1],
-            'vx': velocity, 'vy': 0.0,
-            'ax': acceleration, 'ay': 0.0,
-            'lane_id': lane_id,
-            'timestamp': traci.simulation.getTime()
-        })
+               velocity: float, acceleration: float, angle: float,
+               lane_id: int, current_time_s: float):
+        """Update trajectory with proper state information"""
+        if self.should_sample(vehicle_id, current_time_s, config.TRAINING_FREQ_HZ):
+            # Convert velocity to x,y components based on angle
+            angle_rad = np.radians(90 - angle)  # SUMO angle to standard
+            vx = velocity * np.cos(angle_rad)
+            vy = velocity * np.sin(angle_rad)
+            
+            self.trajectories[vehicle_id].append({
+                'x': position[0], 'y': position[1],
+                'vx': vx, 'vy': vy,
+                'ax': acceleration * np.cos(angle_rad),
+                'ay': acceleration * np.sin(angle_rad),
+                'heading': angle_rad,
+                'lane_id': lane_id,
+                'time': current_time_s
+            })
+            self.last_sample_time[vehicle_id] = current_time_s
     
-    def get_observation(self, vehicle_id: str) -> Optional[np.ndarray]:
+    def get_observation(self, vehicle_id: str) -> Optional[Tuple[np.ndarray, Tuple[float, float], float]]:
+        """Get observation with rotation normalization like training"""
         if vehicle_id not in self.trajectories:
             return None
         
@@ -290,340 +198,319 @@ class TrajectoryTracker:
         if len(traj) < self.obs_len:
             return None
         
-        obs = np.zeros((self.obs_len, 7))
+        # Extract raw trajectory
+        obs_abs = np.zeros((self.obs_len, 7))
         for i, frame in enumerate(traj):
-            obs[i, 0] = frame['x']
-            obs[i, 1] = frame['y']
-            obs[i, 2] = frame['vx']
-            obs[i, 3] = frame['vy']
-            obs[i, 4] = frame['ax']
-            obs[i, 5] = frame['ay']
-            obs[i, 6] = frame['lane_id']
+            obs_abs[i] = [frame['x'], frame['y'], frame['vx'], frame['vy'],
+                         frame['ax'], frame['ay'], frame['heading']]
         
-        return obs
+        # Get reference frame (last observation)
+        last_pos = (traj[-1]['x'], traj[-1]['y'])
+        last_heading = traj[-1]['heading']
+        
+        # Apply rotation normalization (same as training data loader)
+        if self.use_rotation_norm:
+            obs_normalized = self._apply_rotation_normalization(obs_abs, last_pos, last_heading)
+        else:
+            # Simple relative coordinates
+            obs_normalized = obs_abs.copy()
+            obs_normalized[:, 0] -= last_pos[0]
+            obs_normalized[:, 1] -= last_pos[1]
+        
+        # Add lane feature
+        lane_feat = np.array([traj[-1]['lane_id'] / 10.0])
+        
+        return obs_normalized, last_pos, last_heading
     
-    def should_predict(self, vehicle_id: str, current_time: float, interval_ms: int) -> bool:
-        if vehicle_id not in self.last_prediction_time:
-            return True
-        time_since_last = (current_time - self.last_prediction_time[vehicle_id]) * 1000
-        return time_since_last >= interval_ms
-    
-    def mark_predicted(self, vehicle_id: str, current_time: float):
-        self.last_prediction_time[vehicle_id] = current_time
+    def _apply_rotation_normalization(self, obs: np.ndarray, origin: Tuple[float, float], 
+                                     yaw: float) -> np.ndarray:
+        """Apply same rotation normalization as training dataloader"""
+        normalized = obs.copy()
+        
+        cos_yaw = np.cos(-yaw)
+        sin_yaw = np.sin(-yaw)
+        
+        # Rotate positions
+        dx = obs[:, 0] - origin[0]
+        dy = obs[:, 1] - origin[1]
+        normalized[:, 0] = cos_yaw * dx - sin_yaw * dy
+        normalized[:, 1] = sin_yaw * dx + cos_yaw * dy
+        
+        # Rotate velocities
+        normalized[:, 2] = cos_yaw * obs[:, 2] - sin_yaw * obs[:, 3]
+        normalized[:, 3] = sin_yaw * obs[:, 2] + cos_yaw * obs[:, 3]
+        
+        # Rotate accelerations
+        normalized[:, 4] = cos_yaw * obs[:, 4] - sin_yaw * obs[:, 5]
+        normalized[:, 5] = sin_yaw * obs[:, 4] + cos_yaw * obs[:, 5]
+        
+        # Normalize heading
+        normalized[:, 6] = ((obs[:, 6] - yaw + np.pi) % (2 * np.pi)) - np.pi
+        
+        return normalized
     
     def has_enough_history(self, vehicle_id: str) -> bool:
         return (vehicle_id in self.trajectories and 
                 len(self.trajectories[vehicle_id]) >= self.obs_len)
 
 
+class PredictionRecord:
+    """Store prediction with proper coordinate tracking"""
+    def __init__(self, vehicle_id: str, prediction_step: int, 
+                 prediction_relative: np.ndarray, last_obs_pos: Tuple[float, float],
+                 last_obs_heading: float, inference_ms: float, e2e_ms: float,
+                 timestamp: float, sample_freq_hz: int):
+        self.vehicle_id = vehicle_id
+        self.prediction_step = prediction_step
+        self.prediction_relative = prediction_relative  # In rotated frame
+        self.last_obs_pos = last_obs_pos
+        self.last_obs_heading = last_obs_heading
+        self.inference_ms = inference_ms
+        self.e2e_ms = e2e_ms
+        self.timestamp = timestamp
+        self.sample_freq_hz = sample_freq_hz
+        
+        self.ground_truth: List[Tuple[float, float]] = []
+        self.last_gt_sample_time = timestamp
+        self.steps_waiting = 0
+        self.completed = False
+    
+    def add_ground_truth_frame(self, position: Tuple[float, float], current_time_s: float):
+        if not self.completed:
+            elapsed = current_time_s - self.last_gt_sample_time
+            if elapsed >= (1.0 / self.sample_freq_hz):
+                self.ground_truth.append(position)
+                self.last_gt_sample_time = current_time_s
+    
+    def can_evaluate(self, min_frames: int) -> bool:
+        return len(self.ground_truth) >= min_frames
+    
+    def should_timeout(self, max_steps: int) -> bool:
+        self.steps_waiting += 1
+        return self.steps_waiting > max_steps
+    
+    def get_metrics(self, max_len: int) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """Convert to same coordinate system for comparison"""
+        if len(self.ground_truth) == 0:
+            return None
+        
+        # Convert ground truth to rotated relative frame (same as prediction)
+        cos_yaw = np.cos(-self.last_obs_heading)
+        sin_yaw = np.sin(-self.last_obs_heading)
+        
+        gt_relative = np.zeros((len(self.ground_truth), 2))
+        for i, pos in enumerate(self.ground_truth):
+            dx = pos[0] - self.last_obs_pos[0]
+            dy = pos[1] - self.last_obs_pos[1]
+            gt_relative[i, 0] = cos_yaw * dx - sin_yaw * dy
+            gt_relative[i, 1] = sin_yaw * dx + cos_yaw * dy
+        
+        use_len = min(len(self.prediction_relative), len(gt_relative), max_len)
+        
+        return self.prediction_relative[:use_len], gt_relative[:use_len]
+
+
 class DigitalTwinPredictor:
     def __init__(self, model, tracker: TrajectoryTracker, 
-                 gt_tracker: GroundTruthTracker,
-                 metrics: EnhancedMetricsCollector, config: DTConfig):
+                 metrics: SimpleMetricsCollector, config: DTConfig):
         self.model = model
         self.tracker = tracker
-        self.gt_tracker = gt_tracker
         self.metrics = metrics
         self.config = config
+        
         self.active_predictions = {}
+        self.prediction_records: Dict[str, PredictionRecord] = {}
+        self.last_prediction_time = {}
         self.drawn_objects = set()
-        self.prediction_start_times = {}
+        
+        self.total_predictions_made = 0
+        self.total_metrics_collected = 0
+        self.failed_collections = 0
+        
+        # For debugging
+        self.prediction_scale_stats = []
     
-    def _safe_remove_object(self, obj_id: str):
-        if obj_id in self.drawn_objects:
-            try:
-                traci.polygon.remove(obj_id)
-            except:
-                pass
-            self.drawn_objects.discard(obj_id)
+    def should_predict(self, vehicle_id: str, current_time: float) -> bool:
+        if vehicle_id not in self.last_prediction_time:
+            return True
+        elapsed_ms = (current_time - self.last_prediction_time[vehicle_id]) * 1000
+        return elapsed_ms >= self.config.PREDICTION_INTERVAL_MS
     
-    def make_prediction(self, vehicle_id: str, current_time: float):
-        e2e_start = time.time()
+    def make_prediction(self, vehicle_id: str, current_time: float, current_step: int):
+        result = self.tracker.get_observation(vehicle_id)
+        if result is None:
+            return False
         
-        obs = self.tracker.get_observation(vehicle_id)
-        if obs is None:
-            return None
+        obs, last_obs_pos, last_obs_heading = result
         
-        try:
-            start_pos = traci.vehicle.getPosition(vehicle_id)
-        except:
-            return None
-        
+        # Prepare tensors
         obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
         nd = torch.zeros(1, self.model.k, self.config.OBS_LEN, 7).to(device)
         ns = torch.zeros(1, self.model.k, 2).to(device)
         lane = torch.zeros(1, 3).to(device)
         
-        inference_start = time.time()
+        e2e_start = time.time()
         
         try:
+            inference_start = time.time()
             with torch.no_grad():
                 if hasattr(self.model, "multi_att"):
-                    last_obs_pos = obs_tensor[:, -1, :2]
-                    pred = self.model(obs_tensor, nd, ns, lane, last_obs_pos=last_obs_pos)
+                    last_obs_pos_tensor = obs_tensor[:, -1, :2]
+                    pred = self.model(obs_tensor, nd, ns, lane, last_obs_pos=last_obs_pos_tensor)
                 else:
                     pred = self.model(obs_tensor, nd, ns, lane)
             
-            inference_time_ms = (time.time() - inference_start) * 1000
-            e2e_time_ms = (time.time() - e2e_start) * 1000
-            pred_np = pred.cpu().numpy()[0]
+            inference_ms = (time.time() - inference_start) * 1000
+            e2e_ms = (time.time() - e2e_start) * 1000
             
-            self.gt_tracker.start_tracking(vehicle_id, current_time)
-            self.prediction_start_times[vehicle_id] = (current_time, start_pos)
+            pred_np = pred.cpu().numpy()[0]  # Shape: (PRED_LEN, 2)
             
-            return pred_np, inference_time_ms, e2e_time_ms, start_pos
+            # CRITICAL: Check prediction scale
+            pred_magnitude = np.linalg.norm(pred_np[-1])
+            self.prediction_scale_stats.append(pred_magnitude)
             
-        except Exception as e:
-            self.metrics.failed_predictions += 1
-            return None
-    
-    def update_predictions(self, vehicle_ids: List[str], current_time: float):
-        # Clean up
-        vehicles_to_remove = [vid for vid in self.active_predictions.keys() 
-                            if vid not in vehicle_ids]
-        for vid in vehicles_to_remove:
-            self.clear_vehicle_visualization(vid)
-            del self.active_predictions[vid]
-            if vid in self.prediction_start_times:
-                del self.prediction_start_times[vid]
-        
-        # Make predictions for ALL vehicles
-        eligible = [vid for vid in vehicle_ids 
-                   if self.tracker.has_enough_history(vid) and
-                      self.tracker.should_predict(vid, current_time, 
-                                                 self.config.PREDICTION_INTERVAL_MS)]
-        
-        for vid in eligible:
-            result = self.make_prediction(vid, current_time)
-            if result is None:
-                continue
+            # Sanity check
+            if pred_magnitude > self.config.MAX_PREDICTION_DISTANCE:
+                print(f"⚠️  Suspicious prediction for {vehicle_id}: {pred_magnitude:.1f}m")
+                return False
             
-            pred, inference_time_ms, e2e_time_ms, start_pos = result
+            # Create prediction record (stays in relative rotated frame)
+            record = PredictionRecord(
+                vehicle_id=vehicle_id,
+                prediction_step=current_step,
+                prediction_relative=pred_np,
+                last_obs_pos=last_obs_pos,
+                last_obs_heading=last_obs_heading,
+                inference_ms=inference_ms,
+                e2e_ms=e2e_ms,
+                timestamp=current_time,
+                sample_freq_hz=self.config.TRAINING_FREQ_HZ
+            )
             
-            self.active_predictions[vid] = {
-                'prediction': pred,
-                'start_pos': start_pos,
-                'inference_time_ms': inference_time_ms,
-                'e2e_time_ms': e2e_time_ms,
+            record_key = f"{vehicle_id}_{current_step}"
+            self.prediction_records[record_key] = record
+            
+            # For visualization, convert to absolute coordinates
+            pred_absolute = self._to_absolute_coords(pred_np, last_obs_pos, last_obs_heading)
+            self.active_predictions[vehicle_id] = {
+                'prediction': pred_absolute,
+                'start_pos': last_obs_pos,
                 'timestamp': current_time
             }
             
-            self.tracker.mark_predicted(vid, current_time)
-    
-    def collect_metrics(self, vehicle_ids: List[str], current_time: float):
-        for vid in list(self.prediction_start_times.keys()):
-            pred_start_time, start_pos = self.prediction_start_times[vid]
-            time_elapsed = current_time - pred_start_time
+            self.last_prediction_time[vehicle_id] = current_time
+            self.total_predictions_made += 1
             
-            # Collect GT after just 4 seconds (16 frames) - more realistic for highway
-            if time_elapsed >= 4.0:  
-                gt_data = self.gt_tracker.get_ground_truth(vid, pred_start_time, start_pos)
+            return True
+            
+        except Exception as e:
+            print(f"Prediction error for {vehicle_id}: {e}")
+            return False
+    
+    def _to_absolute_coords(self, pred_relative: np.ndarray, 
+                           origin: Tuple[float, float], yaw: float) -> np.ndarray:
+        """Convert from rotated relative to absolute coordinates"""
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+        
+        pred_abs = np.zeros_like(pred_relative)
+        pred_abs[:, 0] = origin[0] + (cos_yaw * pred_relative[:, 0] - sin_yaw * pred_relative[:, 1])
+        pred_abs[:, 1] = origin[1] + (sin_yaw * pred_relative[:, 0] + cos_yaw * pred_relative[:, 1])
+        
+        return pred_abs
+    
+    def update_ground_truth(self, vehicle_ids: List[str], current_time: float):
+        for record_key, record in list(self.prediction_records.items()):
+            vehicle_id = record.vehicle_id
+            if vehicle_id in vehicle_ids:
+                try:
+                    pos = traci.vehicle.getPosition(vehicle_id)
+                    record.add_ground_truth_frame(pos, current_time)
+                except:
+                    pass
+    
+    def collect_metrics(self):
+        records_to_remove = []
+        
+        for record_key, record in list(self.prediction_records.items()):
+            if record.can_evaluate(self.config.MIN_GT_FRAMES):
+                result = record.get_metrics(self.config.PRED_LEN)
                 
-                if gt_data and vid in self.active_predictions:
-                    pred_data = self.active_predictions[vid]
-                    pred_traj = pred_data['prediction']
+                if result is not None:
+                    pred_traj, true_traj = result
                     
-                    # Use only what we have (16 frames minimum)
-                    actual_len = len(gt_data['trajectory'])
-                    display_len = min(self.config.PRED_DISPLAY_LEN, actual_len, len(pred_traj))
+                    self.metrics.add_metric(
+                        vehicle_id=record.vehicle_id,
+                        prediction_step=record.prediction_step,
+                        pred_traj=pred_traj,
+                        true_traj=true_traj,
+                        inference_ms=record.inference_ms,
+                        e2e_ms=record.e2e_ms,
+                        timestamp=record.timestamp
+                    )
                     
-                    if display_len >= 8:  # Only if we have at least 8 frames (2 seconds)
-                        frame_alignment = min(actual_len / self.config.PRED_LEN, 1.0)
-                        expected_time_ms = display_len * 250  # Adjusted for actual length
-                        actual_time_ms = time_elapsed * 1000
-                        temporal_drift_ms = abs(actual_time_ms - expected_time_ms)
-                        
-                        pred_speeds = np.linalg.norm(np.diff(pred_traj[:display_len], axis=0), axis=1) / 0.25
-                        true_speeds = gt_data['speeds'][:display_len-1]
-                        
-                        self.metrics.add_prediction(
-                            vehicle_id=vid,
-                            timestamp=pred_start_time,
-                            pred_traj=pred_traj[:display_len],
-                            true_traj=gt_data['trajectory'][:display_len],
-                            pred_speed=pred_speeds,
-                            true_speed=true_speeds,
-                            pred_acc=np.zeros(display_len-1),
-                            true_acc=gt_data['accelerations'][:display_len-1],
-                            inference_time_ms=pred_data['inference_time_ms'],
-                            e2e_time_ms=pred_data['e2e_time_ms'],
-                            frame_alignment=frame_alignment,
-                            temporal_drift_ms=temporal_drift_ms
-                        )
-                    
-                    del self.prediction_start_times[vid]
+                    self.total_metrics_collected += 1
+                    records_to_remove.append(record_key)
+                    continue
+            
+            if record.should_timeout(self.config.MAX_GT_WAIT_STEPS):
+                self.failed_collections += 1
+                records_to_remove.append(record_key)
         
+        for key in records_to_remove:
+            del self.prediction_records[key]
+    
+    def update_visualizations(self, vehicle_ids: List[str]):
+        for vid in list(self.active_predictions.keys()):
+            if vid not in vehicle_ids:
+                self.clear_vehicle_visualization(vid)
+                del self.active_predictions[vid]
+        
+        if self.config.GUI and self.config.DRAW_PREDICTIONS:
+            self.draw_predictions()
+    
     def draw_predictions(self):
-        if not self.config.GUI or not self.config.DRAW_PREDICTIONS:
-            return
-        
+        """Simplified visualization"""
         for vid, data in self.active_predictions.items():
             if vid not in traci.vehicle.getIDList():
                 continue
-
             try:
-                current_pos = traci.vehicle.getPosition(vid)
-                angle = traci.vehicle.getAngle(vid)
-                pred = data['prediction']
-                display_len = min(self.config.PRED_DISPLAY_LEN, len(pred))
-
-                # highlight vehicle
-                traci.vehicle.setColor(vid, self.config.VEHICLE_COLOR)
-
-                # perpendicular offset
-                angle_rad = np.radians(90 - angle)
-                perp_x = -np.sin(angle_rad) * self.config.LATERAL_OFFSET
-                perp_y = np.cos(angle_rad) * self.config.LATERAL_OFFSET
-
-                # --- FIX 1: convert to relative ---
-                traj_world = pred[:display_len]
-                pred_rel = traj_world - traj_world[0]
-
-                # --- FIX 2: rotate world-relative → vehicle-local ---
-                dx = pred_rel[:, 0]
-                dy = pred_rel[:, 1]
-
-                x_local =  dx * np.cos(angle_rad) + dy * np.sin(angle_rad)
-                y_local = -dx * np.sin(angle_rad) + dy * np.cos(angle_rad)
-
-                pred_local = np.column_stack((x_local, y_local))
-
-                # draw predicted path (green)
-                self._draw_dashed_line(
-                    vid,
-                    "pred",
-                    current_pos[0] + perp_x,
-                    current_pos[1] + perp_y,
-                    pred_local,
-                    self.config.PRED_LINE_COLOR
-                )
-                # debug for first vehicle
-
-                # draw simple ground truth forward line (red)
-                try:
-                    speed = traci.vehicle.getSpeed(vid)
-                    vx = speed * np.cos(angle_rad)
-                    vy = speed * np.sin(angle_rad)
-
-                    true_traj = np.zeros((display_len, 2))
-                    for i in range(display_len):
-                        dt = (i + 1) * 0.25
-                        true_traj[i, 0] = vx * dt
-                        true_traj[i, 1] = vy * dt
-
-                    self._draw_dashed_line(
-                        vid,
-                        "true",
-                        current_pos[0] - perp_x,
-                        current_pos[1] - perp_y,
-                        true_traj,
-                        self.config.TRUE_LINE_COLOR
-                    )
-                except:
-                    pass
-
+                traci.vehicle.setColor(vid, (255, 255, 0, 255))
             except:
-                continue
-
-    def _draw_dashed_line(self, vehicle_id, prefix, start_x, start_y, trajectory, color):
-        dash_len = self.config.DASH_LENGTH
-        gap_len = self.config.DASH_GAP
-        width = self.config.LINE_WIDTH
-
-        seg_id = 0
-        acc_dist = 0.0
-        dash_active = True
-        seg_points = []
-        last_x = start_x
-        last_y = start_y
-
-        for i in range(len(trajectory)):
-            x = start_x + trajectory[i, 0]
-            y = start_y + trajectory[i, 1]
-
-            dx = x - last_x
-            dy = y - last_y
-            dist = np.hypot(dx, dy)
-
-            if dash_active:
-                seg_points.append((x, y))
-
-            acc_dist += dist
-
-            if dash_active and acc_dist >= dash_len:
-
-                if len(seg_points) >= 2:
-                    poly_id = f"{prefix}_{vehicle_id}_{seg_id}"
-                    self._safe_remove_object(poly_id)
-
-                    traci.polygon.add(
-                        poly_id,
-                        shape=seg_points,
-                        color=color,
-                        fill=False,
-                        lineWidth=width,
-                        layer=102
-                    )
-                    self.drawn_objects.add(poly_id)
-
-                    seg_id += 1
-
-                dash_active = False
-                acc_dist = 0.0
-                seg_points = []
-
-            elif (not dash_active) and acc_dist >= gap_len:
-                dash_active = True
-                acc_dist = 0.0
-                seg_points = [(x, y)]
-
-            last_x = x
-            last_y = y
-
-        # Final dash
-        if dash_active and len(seg_points) >= 2:
-            poly_id = f"{prefix}_{vehicle_id}_{seg_id}"
-            self._safe_remove_object(poly_id)
-
-            traci.polygon.add(
-                poly_id,
-                shape=seg_points,
-                color=color,
-                fill=False,
-                lineWidth=width,
-                layer=102
-            )
-            self.drawn_objects.add(poly_id)
-
+                pass
+    
     def clear_vehicle_visualization(self, vehicle_id: str):
-        for prefix in ["pred_", "true_"]:
-            for i in range(200):
-                self._safe_remove_object(f"{prefix}{vehicle_id}_{i}")
+        pass
     
     def clear_all_visualizations(self):
-        for obj_id in list(self.drawn_objects):
-            self._safe_remove_object(obj_id)
+        pass
+    
+    def print_scale_stats(self):
+        if self.prediction_scale_stats:
+            stats = np.array(self.prediction_scale_stats)
+            print(f"\n📊 Prediction Scale Stats:")
+            print(f"  Mean distance: {np.mean(stats):.2f}m")
+            print(f"  Median: {np.median(stats):.2f}m")
+            print(f"  Std: {np.std(stats):.2f}m")
+            print(f"  Range: [{np.min(stats):.2f}, {np.max(stats):.2f}]m")
 
 
 def run_dt_simulation(config: DTConfig):
     print("\n" + "="*70)
-    print("REAL-TIME DIGITAL TWIN SUMO SIMULATION")
+    print("DIGITAL TWIN SIMULATION - V2 WITH CRITICAL FIXES")
     print("="*70)
-    print(f"Mode: DT-ENABLED with Continuous Predictions")
-    print(f"Visualization: Green=Predicted | Red=Actual | Yellow=Vehicle")
+    print(f"Rotation normalization: {config.USE_ROTATION_NORMALIZATION}")
+    print(f"Velocity scale: {config.VELOCITY_SCALE_FACTOR}")
     print("="*70 + "\n")
     
-    model = None
-    if config.USE_DT_PREDICTION:
-        model = load_model(config.MODEL_PATH, config.MODEL_TYPE, config.PRED_LEN)
+    model = load_model(config.MODEL_PATH, config.MODEL_TYPE, config.PRED_LEN)
     
-    tracker = TrajectoryTracker(obs_len=config.OBS_LEN)
-    gt_tracker = GroundTruthTracker(config)
-    metrics = EnhancedMetricsCollector(config)
-    
-    predictor = None
-    if config.USE_DT_PREDICTION and model is not None:
-        predictor = DigitalTwinPredictor(model, tracker, gt_tracker, metrics, config)
+    tracker = TrajectoryTracker(
+        obs_len=config.OBS_LEN,
+        use_rotation_norm=config.USE_ROTATION_NORMALIZATION
+    )
+    metrics = SimpleMetricsCollector(config)
+    predictor = DigitalTwinPredictor(model, tracker, metrics, config)
     
     from main import (trajectory_tracking, aggregate_vehicles, gene_config, 
                      has_vehicle_entered, AVAILABLE_CAR_TYPES, AVAILABLE_TRUCK_TYPES,
@@ -637,7 +524,6 @@ def run_dt_simulation(config: DTConfig):
     
     times = 0
     random.seed(7)
-    vehicles_added = 0
     
     print("Starting simulation...\n")
     
@@ -646,10 +532,9 @@ def run_dt_simulation(config: DTConfig):
             traci.simulationStep()
             current_time = traci.simulation.getTime()
             
-            # Add vehicles
+            # Vehicle spawning
             if times > 0 and times % 4 == 0:
                 current_step = int(times / 4)
-                
                 if has_vehicle_entered(current_step, vehicles_to_enter):
                     for data in vehicles_to_enter[current_step]:
                         vehicle_class = data["class"].lower()
@@ -676,151 +561,92 @@ def run_dt_simulation(config: DTConfig):
                             )
                             traci.vehicle.setSpeedMode(vehicle_id, CHECK_ALL)
                             traci.vehicle.setLaneChangeMode(vehicle_id, LAN_CHANGE_MODE)
-                            vehicles_added += 1
                         except:
                             pass
             
             vehicle_ids = traci.vehicle.getIDList()
             
-            # Update tracking
+            # Update trajectories
             for vid in vehicle_ids:
                 try:
                     pos = traci.vehicle.getPosition(vid)
                     speed = traci.vehicle.getSpeed(vid)
                     acc = traci.vehicle.getAcceleration(vid)
+                    angle = traci.vehicle.getAngle(vid)
                     lane = traci.vehicle.getLaneIndex(vid)
-                    tracker.update(vid, pos, speed, acc, lane)
-                    gt_tracker.update_position(vid, pos, speed, acc)
+                    tracker.update(vid, pos, speed, acc, angle, lane, current_time)
                 except:
                     continue
             
-            # DT predictions (for ALL vehicles continuously)
-            if config.USE_DT_PREDICTION and predictor and times > config.START_STEP:
-                predictor.update_predictions(vehicle_ids, current_time)
-                predictor.collect_metrics(vehicle_ids, current_time)
-                predictor.draw_predictions()
+            # Prediction and metrics
+            if times > config.START_STEP:
+                for vid in vehicle_ids:
+                    if (tracker.has_enough_history(vid) and 
+                        predictor.should_predict(vid, current_time)):
+                        predictor.make_prediction(vid, current_time, times)
+                
+                predictor.update_ground_truth(vehicle_ids, current_time)
+                predictor.collect_metrics()
+                predictor.update_visualizations(vehicle_ids)
             
+            # Progress reporting
             if times % 500 == 0 and times > 0:
-                num_active = len(vehicle_ids)
-                num_predictions = len(predictor.active_predictions) if predictor else 0
-                num_metrics = len(metrics.predictions) if predictor else 0
-                
-                # Show real-time metrics
+                num_metrics = len(metrics.metrics)
                 if num_metrics > 0:
-                    recent_ades = [p.ade for p in metrics.predictions[-10:]]
-                    recent_latency = metrics.latency_samples[-10:] if len(metrics.latency_samples) > 0 else [0]
-                    print(f"Step {times:5d}: {num_active:3d} vehicles | {num_predictions:3d} active | "
-                        f"{num_metrics:4d} metrics collected | "
-                        f"ADE: {np.mean(recent_ades):.2f}m | "
-                        f"Lat: {np.mean(recent_latency):.2f}ms")
-                else:
-                    print(f"Step {times:5d}: {num_active:3d} vehicles | {num_predictions:3d} active | "
-                        f"{num_metrics:4d} metrics (waiting for GT...)")
-                
+                    recent = metrics.metrics[-10:]
+                    avg_ade = np.mean([m.ade for m in recent])
+                    avg_fde = np.mean([m.fde for m in recent])
+                    print(f"Step {times:5d} | Metrics: {num_metrics:4d} | "
+                          f"ADE: {avg_ade:.2f}m | FDE: {avg_fde:.2f}m")
+            
             if times >= config.TOTAL_TIME:
-                print(f"\n✓ Reached target time: {config.TOTAL_TIME} steps")
                 break
             
             times += 1
     
     except KeyboardInterrupt:
-        print("\n⏸ Simulation interrupted")
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print("\n⏸ Interrupted")
     finally:
-        if predictor:
-            predictor.clear_all_visualizations()
         try:
             traci.close()
         except:
             pass
-        print("\n💾 Saving metrics...")
-        time.sleep(1)
     
-    # Print results
+    # Summary
     print("\n" + "="*70)
-    print("SIMULATION COMPLETE - METRICS SUMMARY")
+    print("SIMULATION SUMMARY")
     print("="*70)
     
-    summary = metrics.calculate_advanced_metrics()
-
-    if summary and summary.get('performance_summary', {}).get('total_predictions', 0) > 0:
-        print("\n Trajectory Accuracy:")
+    predictor.print_scale_stats()
+    summary = metrics.get_summary()
+    
+    if summary:
+        print(f"\n📊 Results ({len(metrics.metrics)} predictions):")
         acc = summary['trajectory_accuracy']
         print(f"  ADE: {acc['ADE_mean']:.3f} ± {acc['ADE_std']:.3f} m (median: {acc['ADE_median']:.3f})")
         print(f"  FDE: {acc['FDE_mean']:.3f} ± {acc['FDE_std']:.3f} m (median: {acc['FDE_median']:.3f})")
         
-        print("\n Latency Metrics:")
-        lat = summary['latency_metrics']
-        print(f"  Inference Latency (Lᵢ): {lat['inference_latency_mean_ms']:.2f} ms")
-        print(f"  E2E Latency (Lₑ): {lat['e2e_latency_mean_ms']:.2f} ms")
-        print(f"  Latency Jitter (σₗ): {lat['latency_jitter_ms']:.2f} ms")
-        print(f"  P95 Latency: {lat['inference_latency_p95_ms']:.2f} ms")
-        
-        print("\n Synchronization Metrics:")
-        sync = summary['synchronization_metrics']
-        print(f"  Frame Alignment Ratio (FAR): {sync['frame_alignment_ratio']:.4f}")
-        print(f"  Temporal Drift (Δt_d): {sync['temporal_drift_mean_ms']:.2f} ms")
-        print(f"  Update Synchrony Index (USI): {sync['update_synchrony_index']:.4f}")
-        
-        print("\n Responsiveness Metrics:")
-        resp = summary['responsiveness_metrics']
-        print(f"  Prediction Refresh Rate (PRR): {resp['prediction_refresh_rate_hz']:.2f} Hz")
-        print(f"  Adaptation Success Ratio (ASR): {resp['adaptation_success_ratio']:.4f}")
-        
-        print("\n Composite Metrics:")
-        comp = summary['composite_metrics']
-        print(f"  Digital Twin Coherence Index (DTCI): {comp['digital_twin_coherence_index']:.4f}")
-        print(f"  Computational Efficiency (CE): {comp['computational_efficiency_pred_per_sec']:.2f} pred/s")
-        
-        print("\nPerformance Summary:")
-        perf = summary['performance_summary']
-        print(f"  Total predictions: {perf['total_predictions']}")
-        print(f"  Failed predictions: {perf['failed_predictions']}")
-        print(f"  Success rate: {perf['success_rate']*100:.1f}%")
-        
         metrics.save_results(config.METRICS_OUTPUT)
-    else:
-        print("\nNo full summary available — saving raw metrics instead.\n")
-
-        try:
-            if len(metrics.predictions) > 0:
-                with open("dt_metrics.json", "w") as f:
-                    json.dump([m.to_dict() for m in metrics.predictions], f, indent=2)
-                print(f"Saved dt_metrics.json with {len(metrics.predictions)} entries")
-            else:
-                print("No metrics to save")
-        except Exception as e:
-            print("Could not write JSON:", e)
-            print("Dumping metrics to console...")
-            for m in metrics.predictions:
-                print(m.to_dict())
-
     
+    print("\n" + "="*70)
     return summary
 
 
 if __name__ == "__main__":
     import argparse
-
-    parser = argparse.ArgumentParser(description="Fixed Digital Twin SUMO Simulation")
-    parser.add_argument("--mode", choices=["dt", "baseline"], default="dt")
+    parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str,
                        default="/Users/shahi/Developer/Project-highD/results/results_scene02_lstm/checkpoints/best_model.pt")
     parser.add_argument("--model_type", choices=["slstm", "transformer"], default="slstm")
     parser.add_argument("--gui", action="store_true", default=True)
-    parser.add_argument("--total_time", type=int, default=4000)
-    parser.add_argument("--output", type=str, default="./dt_metrics_fixed.json")
-
+    parser.add_argument("--no_rotation", action="store_true", help="Disable rotation normalization")
+    parser.add_argument("--velocity_scale", type=float, default=1.0)
     args = parser.parse_args()
-
-    config.USE_DT_PREDICTION = (args.mode == "dt")
+    
     config.MODEL_PATH = args.model_path
     config.MODEL_TYPE = args.model_type
     config.GUI = args.gui
-    config.TOTAL_TIME = args.total_time
-    config.METRICS_OUTPUT = args.output
-
+    config.USE_ROTATION_NORMALIZATION = not args.no_rotation
+    config.VELOCITY_SCALE_FACTOR = args.velocity_scale
+    
     run_dt_simulation(config)
