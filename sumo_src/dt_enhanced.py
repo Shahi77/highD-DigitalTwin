@@ -640,7 +640,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_type", choices=["slstm", "transformer"], default="slstm")
     parser.add_argument("--gui", action="store_true", default=True)
     parser.add_argument("--no_rotation", action="store_true", help="Disable rotation normalization")
-    parser.add_argument("--velocity_scale", type=float, default=1.0)
+    parser.add_argument("--velocity_scale", type=float, default=1.309)
     args = parser.parse_args()
     
     config.MODEL_PATH = args.model_path
