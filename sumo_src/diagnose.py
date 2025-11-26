@@ -1,226 +1,355 @@
-#!/usr/bin/env python3
 """
-Diagnostic script to check your SUMO setup
+Digital Twin Diagnostic Analyzer
+---------------------------------
+Verifies if your simulation results are trustworthy by checking:
+1. Prediction diversity (are predictions actually varying?)
+2. Physical plausibility (do predictions follow road geometry?)
+3. Comparison with training performance
+4. Coordinate system verification
 """
 
-import os
-import sys
-import csv
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
 
-def check_file(path, description, min_size=None):
-    """Check if a file exists and optionally check its size"""
-    if os.path.exists(path):
-        size = os.path.getsize(path)
-        size_str = f"{size:,} bytes"
-        if min_size and size < min_size:
-            print(f"  {description}: {path} (too small: {size_str})")
-            return False
+
+def load_metrics(filepath: str):
+    """Load metrics from JSON file"""
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+    return data
+
+
+def analyze_prediction_diversity(metrics_data):
+    """Check if predictions are actually diverse"""
+    print("\n" + "="*70)
+    print("PREDICTION DIVERSITY ANALYSIS")
+    print("="*70)
+    
+    raw_preds = metrics_data.get('raw_predictions', [])
+    if not raw_preds:
+        print("⚠️  No raw predictions available!")
+        return
+    
+    distances = [p['pred_distance'] for p in raw_preds]
+    ades = [p['ade'] for p in raw_preds]
+    fdes = [p['fde'] for p in raw_preds]
+    
+    print(f"\n📊 Prediction Distance Statistics (n={len(distances)}):")
+    print(f"  Mean: {np.mean(distances):.2f}m")
+    print(f"  Std:  {np.std(distances):.2f}m")
+    print(f"  CV (coefficient of variation): {np.std(distances)/np.mean(distances)*100:.2f}%")
+    
+    # Low CV indicates all predictions are similar
+    cv = np.std(distances) / np.mean(distances) * 100
+    if cv < 5:
+        print(f"\n⚠️  WARNING: Very low diversity (CV={cv:.2f}%)")
+        print(f"  This suggests model is producing nearly identical predictions!")
+        print(f"  Expected CV for real traffic: 15-30%")
+    elif cv < 10:
+        print(f"\n⚠️  CAUTION: Low diversity (CV={cv:.2f}%)")
+        print(f"  Predictions may not be adapting to different scenarios")
+    else:
+        print(f"\n✓ Good diversity (CV={cv:.2f}%)")
+    
+    # Check per-vehicle variation
+    vehicle_distances = {}
+    for p in raw_preds:
+        vid = p['vehicle_id']
+        if vid not in vehicle_distances:
+            vehicle_distances[vid] = []
+        vehicle_distances[vid].append(p['pred_distance'])
+    
+    within_vehicle_cvs = []
+    for vid, dists in vehicle_distances.items():
+        if len(dists) > 1:
+            cv = np.std(dists) / np.mean(dists) * 100 if np.mean(dists) > 0 else 0
+            within_vehicle_cvs.append(cv)
+    
+    if within_vehicle_cvs:
+        print(f"\n📊 Within-Vehicle Prediction Variation:")
+        print(f"  Mean CV: {np.mean(within_vehicle_cvs):.2f}%")
+        if np.mean(within_vehicle_cvs) < 2:
+            print(f"  ⚠️  Same vehicle getting nearly identical predictions!")
+
+
+def analyze_physical_plausibility(metrics_data):
+    """Check if predictions are physically plausible"""
+    print("\n" + "="*70)
+    print("PHYSICAL PLAUSIBILITY ANALYSIS")
+    print("="*70)
+    
+    debug_stats = metrics_data.get('debug_stats', {})
+    avg_dist = debug_stats.get('avg_pred_distance', 0)
+    
+    # Expected values for highway traffic
+    # At 4Hz, 20 frames = 5 seconds
+    # Highway speeds: 25-35 m/s (90-126 km/h)
+    # Expected distance in 5s: 125-175m
+    
+    print(f"\n🚗 Expected vs Actual:")
+    print(f"  Prediction horizon: 5 seconds (20 frames @ 4Hz)")
+    print(f"  Expected highway distance: 125-175m")
+    print(f"  Your average distance: {avg_dist:.2f}m")
+    
+    if avg_dist < 100:
+        print(f"\n⚠️  WARNING: Predictions too short!")
+        print(f"  Possible causes:")
+        print(f"  - Model underestimating velocities")
+        print(f"  - Wrong coordinate system")
+        print(f"  - Time scaling mismatch")
+    elif avg_dist > 200:
+        print(f"\n⚠️  WARNING: Predictions too long!")
+        print(f"  Possible causes:")
+        print(f"  - Velocity scaling applied incorrectly")
+        print(f"  - Coordinate system error")
+    else:
+        print(f"\n✓ Distance within expected range")
+    
+    # Check ADE/FDE ratio
+    traj_acc = metrics_data.get('trajectory_accuracy', {})
+    ade = traj_acc.get('ADE_mean', 0)
+    fde = traj_acc.get('FDE_mean', 0)
+    
+    if ade > 0:
+        ratio = fde / ade
+        print(f"\n📊 Error Growth Analysis:")
+        print(f"  FDE/ADE ratio: {ratio:.2f}")
+        print(f"  Expected ratio: 1.5-2.5 (errors grow over time)")
+        
+        if ratio < 1.2:
+            print(f"  ⚠️  Ratio too low - might indicate coordinate issues")
+        elif ratio > 3.0:
+            print(f"  ⚠️  Ratio too high - errors growing too fast")
         else:
-            print(f"{description}: {path} ({size_str})")
-            return True
+            print(f"  ✓ Error growth pattern looks reasonable")
+
+
+def compare_with_training(metrics_data, training_ade=0.795, training_fde=5.322):
+    """Compare simulation results with training performance"""
+    print("\n" + "="*70)
+    print("TRAINING VS SIMULATION COMPARISON")
+    print("="*70)
+    
+    traj_acc = metrics_data.get('trajectory_accuracy', {})
+    sim_ade = traj_acc.get('ADE_mean', 0)
+    sim_fde = traj_acc.get('FDE_mean', 0)
+    
+    print(f"\n📊 Performance Comparison:")
+    print(f"\n  Training (on highD dataset):")
+    print(f"    ADE: {training_ade:.3f}m")
+    print(f"    FDE: {training_fde:.3f}m")
+    
+    print(f"\n  Simulation (on SUMO):")
+    print(f"    ADE: {sim_ade:.3f}m")
+    print(f"    FDE: {sim_fde:.3f}m")
+    
+    ade_ratio = sim_ade / training_ade if training_ade > 0 else 0
+    fde_ratio = sim_fde / training_fde if training_fde > 0 else 0
+    
+    print(f"\n  Degradation:")
+    print(f"    ADE: {ade_ratio:.2f}x worse")
+    print(f"    FDE: {fde_ratio:.2f}x worse")
+    
+    print(f"\n🔍 Interpretation:")
+    if ade_ratio < 1.5:
+        print(f"  ✓ Excellent - minimal domain shift")
+    elif ade_ratio < 2.5:
+        print(f"  ✓ Good - expected domain shift range")
+    elif ade_ratio < 4.0:
+        print(f"  ⚠️  Moderate degradation - investigate causes")
     else:
-        print(f" {description}: {path} NOT FOUND")
-        return False
+        print(f"  ❌ High degradation - likely systematic error!")
+        print(f"\n  Possible causes:")
+        print(f"  - Coordinate system mismatch")
+        print(f"  - Wrong data preprocessing")
+        print(f"  - SUMO vs real data distribution mismatch")
+        print(f"  - Scaling factors applied incorrectly")
 
 
-def check_highd_data():
-    """Check highD dataset files"""
-    print("\n Checking highD Dataset:")
-    print("-" * 60)
+def check_velocity_scaling_effect(metrics_data, scale_factor=1.309):
+    """Analyze if velocity scaling is helping or hiding issues"""
+    print("\n" + "="*70)
+    print("VELOCITY SCALING ANALYSIS")
+    print("="*70)
     
-    meta_path = "./data/highd/dataset/02_tracksMeta.csv"
-    tracks_path = "./data/highd/dataset/02_tracks.csv"
+    if scale_factor == 1.0:
+        print("\n✓ No velocity scaling applied")
+        return
     
-    meta_ok = check_file(meta_path, "TracksMeta", min_size=1000)
-    tracks_ok = check_file(tracks_path, "Tracks", min_size=10000)
+    print(f"\n⚠️  Velocity scaling factor: {scale_factor}")
     
-    if meta_ok and tracks_ok:
-        # Count vehicles
-        try:
-            with open(meta_path, 'r') as f:
-                reader = csv.DictReader(f)
-                direction_1_count = sum(1 for row in reader if row['drivingDirection'] == '1')
-            
-            with open(tracks_path, 'r') as f:
-                reader = csv.DictReader(f)
-                unique_ids = set(row['id'] for row in reader)
-            
-            print(f"   Vehicles (direction 1): {direction_1_count}")
-            print(f"   Total unique vehicle IDs: {len(unique_ids)}")
-        except Exception as e:
-            print(f"  Error reading data: {e}")
+    debug_stats = metrics_data.get('debug_stats', {})
+    avg_dist = debug_stats.get('avg_pred_distance', 0)
     
-    return meta_ok and tracks_ok
+    # What would distance be without scaling?
+    original_dist = avg_dist / scale_factor
+    
+    print(f"\n📊 Effect of Scaling:")
+    print(f"  Original prediction distance: {original_dist:.2f}m")
+    print(f"  After {scale_factor}x scaling: {avg_dist:.2f}m")
+    
+    print(f"\n🔍 Important Questions:")
+    print(f"  1. Why does model predict {original_dist:.2f}m instead of ~130m?")
+    print(f"  2. Is this a training issue or simulation issue?")
+    print(f"  3. Should we retrain instead of scaling?")
+    
+    traj_acc = metrics_data.get('trajectory_accuracy', {})
+    ade = traj_acc.get('ADE_mean', 0)
+    
+    if ade > 2.0:
+        print(f"\n⚠️  Even after scaling, ADE={ade:.2f}m is high")
+        print(f"  This suggests scaling is not fixing the root problem!")
 
 
-def check_sumo_files():
-    """Check SUMO configuration files"""
-    print("\n Checking SUMO Files:")
-    print("-" * 60)
+def plot_error_distribution(metrics_data, output_path=None):
+    """Plot error distributions"""
+    raw_preds = metrics_data.get('raw_predictions', [])
+    if not raw_preds:
+        return
     
-    files_ok = True
+    ades = [p['ade'] for p in raw_preds]
+    fdes = [p['fde'] for p in raw_preds]
+    distances = [p['pred_distance'] for p in raw_preds]
     
-    # Check main directory
-    files_ok &= check_file("sumo_cfg/net.xml", "Network", min_size=500)
-    files_ok &= check_file("sumo_cfg/route.xml", "Routes", min_size=100)
-    files_ok &= check_file("sumo_cfg/freeway.sumo.cfg", "Config", min_size=100)
-    files_ok &= check_file("sumo_cfg/vTypeDistributions.add.xml", "Vehicle Types", min_size=100000)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     
-    # Check vehicle configs
-    check_file("veh_config/car.config.txt", "Car Config", min_size=100)
-    check_file("veh_config/truck.config.txt", "Truck Config", min_size=100)
+    axes[0].hist(ades, bins=30, edgecolor='black', alpha=0.7)
+    axes[0].axvline(np.mean(ades), color='r', linestyle='--', label=f'Mean: {np.mean(ades):.2f}')
+    axes[0].set_xlabel('ADE (m)')
+    axes[0].set_ylabel('Frequency')
+    axes[0].set_title('Average Displacement Error')
+    axes[0].legend()
+    axes[0].grid(alpha=0.3)
     
-    return files_ok
-
-
-def check_network_content():
-    """Check network file content"""
-    print("\n Checking Network Content:")
-    print("-" * 60)
+    axes[1].hist(fdes, bins=30, edgecolor='black', alpha=0.7)
+    axes[1].axvline(np.mean(fdes), color='r', linestyle='--', label=f'Mean: {np.mean(fdes):.2f}')
+    axes[1].set_xlabel('FDE (m)')
+    axes[1].set_ylabel('Frequency')
+    axes[1].set_title('Final Displacement Error')
+    axes[1].legend()
+    axes[1].grid(alpha=0.3)
     
-    try:
-        with open("sumo_cfg/net.xml", 'r') as f:
-            content = f.read()
-            
-            # Check for edge E0
-            if 'id="E0"' in content:
-                print(" Edge E0 found")
-                
-                # Extract length
-                import re
-                length_match = re.search(r'edge id="E0".*?length="([\d.]+)"', content)
-                if length_match:
-                    length = float(length_match.group(1))
-                    print(f"   Length: {length}m")
-                    if length < 1000:
-                        print(f"    Warning: Edge is quite short ({length}m)")
-                
-                # Count lanes
-                lane_count = content.count('lane id="E0_')
-                print(f"   Lanes: {lane_count}")
-            else:
-                print(" Edge E0 NOT FOUND in network")
-                return False
-        
-        return True
-    except Exception as e:
-        print(f" Error reading network: {e}")
-        return False
-
-
-def check_route_content():
-    """Check route file content"""
-    print("\n  Checking Route Content:")
-    print("-" * 60)
+    axes[2].hist(distances, bins=30, edgecolor='black', alpha=0.7)
+    axes[2].axvline(np.mean(distances), color='r', linestyle='--', label=f'Mean: {np.mean(distances):.2f}')
+    axes[2].axvline(130, color='g', linestyle='--', label='Expected: ~130m')
+    axes[2].set_xlabel('Prediction Distance (m)')
+    axes[2].set_ylabel('Frequency')
+    axes[2].set_title('Predicted Travel Distance')
+    axes[2].legend()
+    axes[2].grid(alpha=0.3)
     
-    try:
-        with open("sumo_cfg/route.xml", 'r') as f:
-            content = f.read()
-            
-            if 'id="platoon_route"' in content:
-                print(" Route 'platoon_route' found")
-                
-                if 'edges="E0"' in content:
-                    print("  References edge E0")
-                else:
-                    print(" Does not reference E0")
-            else:
-                print(" Route 'platoon_route' NOT FOUND")
-                return False
-        
-        return True
-    except Exception as e:
-        print(f" Error reading routes: {e}")
-        return False
-
-
-def check_vehicle_types():
-    """Check vehicle type distribution"""
-    print("\n Checking Vehicle Types:")
-    print("-" * 60)
+    plt.tight_layout()
     
-    try:
-        with open("sumo_cfg/vTypeDistributions.add.xml", 'r') as f:
-            content = f.read()
-            
-            car_count = content.count('id="car')
-            truck_count = content.count('id="truck')
-            
-            print(f" Car types: {car_count}")
-            print(f" Truck types: {truck_count}")
-            
-            if car_count < 100:
-                print(f"     Warning: Very few car types ({car_count})")
-            if truck_count < 100:
-                print(f"     Warning: Very few truck types ({truck_count})")
-            
-            return car_count > 0 and truck_count > 0
-    except Exception as e:
-        print(f" Error reading vehicle types: {e}")
-        return False
-
-
-def check_environment():
-    """Check environment variables"""
-    print("\n Checking Environment:")
-    print("-" * 60)
-    
-    if 'SUMO_HOME' in os.environ:
-        sumo_home = os.environ['SUMO_HOME']
-        print(f" SUMO_HOME: {sumo_home}")
-        
-        # Check if SUMO binaries exist
-        sumo_bin = os.path.join(sumo_home, '../../bin/sumo')
-        sumo_gui_bin = os.path.join(sumo_home, '../../bin/sumo-gui')
-        
-        if os.path.exists(os.path.normpath(sumo_bin)):
-            print("    sumo binary found")
-        if os.path.exists(os.path.normpath(sumo_gui_bin)):
-            print("    sumo-gui binary found")
-        
-        return True
+    if output_path:
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"\n💾 Saved plot to {output_path}")
     else:
-        print(" SUMO_HOME not set")
-        print("   Set it with: export SUMO_HOME=/opt/homebrew/opt/sumo/share/sumo")
-        return False
+        plt.savefig('dt_diagnostic_plot.png', dpi=150, bbox_inches='tight')
+        print(f"\n💾 Saved plot to dt_diagnostic_plot.png")
+    
+    plt.close()
+
+
+def generate_recommendations(metrics_data, training_ade=0.795):
+    """Generate actionable recommendations"""
+    print("\n" + "="*70)
+    print("RECOMMENDATIONS")
+    print("="*70)
+    
+    traj_acc = metrics_data.get('trajectory_accuracy', {})
+    sim_ade = traj_acc.get('ADE_mean', 0)
+    debug_stats = metrics_data.get('debug_stats', {})
+    avg_dist = debug_stats.get('avg_pred_distance', 0)
+    std_dist = debug_stats.get('std_pred_distance', 0)
+    
+    issues_found = []
+    
+    # Check diversity
+    cv = (std_dist / avg_dist * 100) if avg_dist > 0 else 0
+    if cv < 5:
+        issues_found.append("low_diversity")
+    
+    # Check distance
+    if avg_dist < 100 or avg_dist > 200:
+        issues_found.append("wrong_distance")
+    
+    # Check degradation
+    degradation = sim_ade / training_ade if training_ade > 0 else 0
+    if degradation > 4.0:
+        issues_found.append("high_degradation")
+    
+    if not issues_found:
+        print("\n✅ Results look reasonable!")
+        print("\nNext steps:")
+        print("  1. Visualize predictions in SUMO GUI")
+        print("  2. Compare with baseline methods")
+        print("  3. Run longer simulations for stability")
+    else:
+        print("\n⚠️  Issues detected! Recommendations:")
+        
+        if "low_diversity" in issues_found:
+            print("\n1. LOW DIVERSITY ISSUE:")
+            print("   - Model producing similar predictions for all vehicles")
+            print("   - Actions:")
+            print("     • Check if observation data is varying")
+            print("     • Verify velocity/acceleration inputs")
+            print("     • Try without velocity scaling first")
+        
+        if "wrong_distance" in issues_found:
+            print("\n2. DISTANCE MISMATCH:")
+            print("   - Predictions not matching expected travel distance")
+            print("   - Actions:")
+            print("     • Verify time horizon (5s @ 4Hz = 20 frames)")
+            print("     • Check coordinate system transformation")
+            print("     • Compare with training data statistics")
+        
+        if "high_degradation" in issues_found:
+            print("\n3. HIGH ERROR DEGRADATION:")
+            print("   - Performance much worse than training")
+            print("   - Actions:")
+            print("     • Run WITHOUT velocity scaling first")
+            print("     • Check coordinate normalization")
+            print("     • Verify rotation transformation matches training")
+            print("     • Consider retraining on SUMO data")
 
 
 def main():
-    """Run all diagnostics"""
-    print("=" * 60)
-    print("  SUMO highD Simulation Diagnostics")
-    print("=" * 60)
+    import argparse
+    parser = argparse.ArgumentParser(description="Diagnostic analysis of DT simulation")
+    parser.add_argument("--metrics", required=True, help="Path to metrics JSON file")
+    parser.add_argument("--training_ade", type=float, default=0.795)
+    parser.add_argument("--training_fde", type=float, default=5.322)
+    parser.add_argument("--velocity_scale", type=float, default=1.0)
+    parser.add_argument("--plot", action="store_true", help="Generate plots")
     
-    checks = [
-        ("Environment", check_environment()),
-        ("SUMO Files", check_sumo_files()),
-        ("Network Content", check_network_content()),
-        ("Route Content", check_route_content()),
-        ("Vehicle Types", check_vehicle_types()),
-        ("highD Data", check_highd_data()),
-    ]
+    args = parser.parse_args()
     
-    print("\n" + "=" * 60)
-    print("  Summary")
-    print("=" * 60)
+    print("\n" + "="*70)
+    print("DIGITAL TWIN DIAGNOSTIC ANALYZER")
+    print("="*70)
+    print(f"Metrics file: {args.metrics}")
+    print("="*70)
     
-    all_ok = True
-    for name, status in checks:
-        status_str = " PASS" if status else "❌ FAIL"
-        print(f"{status_str} {name}")
-        all_ok &= status
+    try:
+        metrics_data = load_metrics(args.metrics)
+    except Exception as e:
+        print(f"\n❌ Error loading metrics: {e}")
+        return
     
-    print("\n" + "=" * 60)
-    if all_ok:
-        print(" All checks passed! You're ready to run the simulation.")
-        print("\nRun: python3 main.py")
-    else:
-        print(" Some checks failed. Please fix the issues above.")
-        print("\nTo fix:")
-        print("  1. Run: bash complete_setup.sh")
-        print("  2. Download highD dataset if needed")
-        print("  3. Run this diagnostic again")
-    print("=" * 60)
+    # Run analyses
+    analyze_prediction_diversity(metrics_data)
+    analyze_physical_plausibility(metrics_data)
+    compare_with_training(metrics_data, args.training_ade, args.training_fde)
+    check_velocity_scaling_effect(metrics_data, args.velocity_scale)
+    
+    if args.plot:
+        plot_error_distribution(metrics_data)
+    
+    generate_recommendations(metrics_data, args.training_ade)
+    
+    print("\n" + "="*70)
 
 
 if __name__ == "__main__":
