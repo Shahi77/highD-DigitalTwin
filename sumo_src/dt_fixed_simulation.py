@@ -36,7 +36,7 @@ class DTConfig:
     TRAINING_FREQ_HZ: int = 4
     SUMO_STEP_MS: int = 1000
     PREDICTION_INTERVAL_MS: int = 500
-    MIN_GT_FRAMES: int = 16
+    MIN_GT_FRAMES: int = 8
     MAX_GT_WAIT_STEPS: int = 100
     
     USE_ROTATION_NORMALIZATION: bool = True
@@ -126,8 +126,7 @@ class PredictionMetrics:
     num_gt_frames: int
     prediction_timestamp: float
     pred_distance: float
-    lateral_error: float  # How much perpendicular to path
-    longitudinal_error: float  # How much along path direction
+
 
 class EnhancedMetricsCollector:
     """Collects both trajectory and system-level metrics"""
@@ -1144,7 +1143,7 @@ def run_dt_simulation(config: DTConfig):
     sys_summary = metrics.get_system_summary()
     
     if traj_summary:
-        print(f"\n📊 TRAJECTORY METRICS ({len(metrics.trajectory_metrics)} predictions):")
+        print(f"\n TRAJECTORY METRICS ({len(metrics.trajectory_metrics)} predictions):")
         print(f"  Total predictions made: {predictor.total_predictions_made}")
         print(f"  Metrics collected: {predictor.total_metrics_collected}")
         print(f"  Failed collections: {predictor.failed_collections}")
@@ -1152,79 +1151,77 @@ def run_dt_simulation(config: DTConfig):
             print(f"  Collection rate: {predictor.total_metrics_collected/predictor.total_predictions_made*100:.1f}%")
         
         acc = traj_summary['trajectory_accuracy']
-        print(f"\n📈 Trajectory Accuracy:")
+        print(f"\n Trajectory Accuracy:")
         print(f"  ADE: {acc['ADE_mean']:.3f} ± {acc['ADE_std']:.3f} m")
         print(f"       (median: {acc['ADE_median']:.3f}, range: [{acc['ADE_min']:.3f}, {acc['ADE_max']:.3f}])")
         print(f"  FDE: {acc['FDE_mean']:.3f} ± {acc['FDE_std']:.3f} m")
         print(f"       (median: {acc['FDE_median']:.3f}, range: [{acc['FDE_min']:.3f}, {acc['FDE_max']:.3f}])")
     
     if sys_summary:
-        print(f"\n⚡ SYSTEM PERFORMANCE METRICS:")
+        print(f"\n SYSTEM PERFORMANCE METRICS:")
         
         # Prediction scale validation
         pred_scale = sys_summary['prediction_scale_validation']
-        print(f"\n  🔍 Prediction Scale Validation ({pred_scale['total_samples']} samples):")
+        print(f"\n  Prediction Scale Validation ({pred_scale['total_samples']} samples):")
         print(f"    Mean prediction distance: {pred_scale['training_pred_mean_m']:.2f}m")
         print(f"    Std: {pred_scale['training_pred_std_m']:.2f}m")
         print(f"    Median: {pred_scale['training_pred_median_m']:.2f}m")
-        print(f"    ⚠️  Analysis: At 4Hz sampling, 5-second horizon = 20 frames")
-        print(f"    Expected travel at 30m/s: ~150m, observed: {pred_scale['training_pred_mean_m']:.1f}m")
         
         stream = sys_summary['streaming_delay']
-        print(f"\n  📡 Streaming Delay (Observation Collection):")
+        print(f"\n  Streaming Delay (Observation Collection):")
         print(f"    Mean: {stream['observation_collection_mean_ms']:.2f} ± {stream['observation_collection_std_ms']:.2f} ms")
         print(f"    P95: {stream['observation_collection_p95_ms']:.2f} ms")
         
         sumo = sys_summary['sumo_simulation']
-        print(f"\n  🚗 SUMO Simulation Step:")
+        print(f"\n  SUMO Simulation Step:")
         print(f"    Mean: {sumo['sumo_step_mean_ms']:.2f} ± {sumo['sumo_step_std_ms']:.2f} ms")
         print(f"    P95: {sumo['sumo_step_p95_ms']:.2f} ms")
         
         pred_overhead = sys_summary['prediction_overhead']
-        print(f"\n  🔄 Prediction Loop Overhead:")
+        print(f"\n Prediction Loop Overhead:")
         print(f"    Mean: {pred_overhead['pred_loop_mean_ms']:.2f} ± {pred_overhead['pred_loop_std_ms']:.2f} ms")
         print(f"    P95: {pred_overhead['pred_loop_p95_ms']:.2f} ms")
         
         traci_delay = sys_summary['prediction_to_traci_delay']
-        print(f"\n  ↔️  Prediction-to-TraCI Injection Delay:")
+        print(f"\n  Prediction-to-TraCI Injection Delay:")
         print(f"    Mean: {traci_delay['traci_update_mean_ms']:.2f} ± {traci_delay['traci_update_std_ms']:.2f} ms")
         print(f"    P95: {traci_delay['traci_update_p95_ms']:.2f} ms")
         
         cycle = sys_summary['end_to_end_cycle']
-        print(f"\n  ⏱️  End-to-End Cycle Time:")
+        print(f"\n  End-to-End Cycle Time:")
         print(f"    Mean: {cycle['total_cycle_mean_ms']:.2f} ± {cycle['total_cycle_std_ms']:.2f} ms")
         print(f"    P95: {cycle['total_cycle_p95_ms']:.2f} ms")
         print(f"    Max: {cycle['total_cycle_max_ms']:.2f} ms")
         
         viz = sys_summary['visualization_overhead']
-        print(f"\n  🎨 Visualization Overhead:")
+        print(f"\n  Visualization Overhead:")
         print(f"    Mean: {viz['viz_update_mean_ms']:.2f} ± {viz['viz_update_std_ms']:.2f} ms")
         print(f"    P95: {viz['viz_update_p95_ms']:.2f} ms")
         
         throughput = sys_summary['throughput']
-        print(f"\n  📊 Throughput:")
+        print(f"\n  Throughput:")
         print(f"    Avg vehicles/step: {throughput['avg_vehicles_per_step']:.1f}")
         print(f"    Max vehicles/step: {throughput['max_vehicles_per_step']}")
         print(f"    Avg predictions/step: {throughput['avg_predictions_per_step']:.2f}")
         print(f"    Total predictions: {throughput['total_predictions']}")
         
         sync = sys_summary['synchronization']
-        print(f"\n  🔄 Synchronization & Stability:")
+        print(f"\n  Synchronization & Stability:")
         print(f"    Avg queue depth: {sync['avg_queue_depth']:.1f}")
         print(f"    Queue range: [{sync['min_queue_depth']}, {sync['max_queue_depth']}] (Δ={sync['queue_fluctuation_range']})")
         print(f"    Global variance: {sync['stability_variance']:.2f}")
         print(f"    Rolling variance: {sync['avg_rolling_variance']:.2f}")
-        print(f"    ⚠️  Analysis: High fluctuation ({sync['queue_fluctuation_range']} vehicles) indicates")
+        print(f"    Analysis: High fluctuation ({sync['queue_fluctuation_range']} vehicles) indicates")
         print(f"        variable traffic flow or vehicle lifetime patterns")
         
         drift = sys_summary['temporal_drift']
-        print(f"\n  ⏰ Temporal Drift Analysis:")
+        print(f"\n Temporal Drift Analysis:")
         print(f"    Avg time ratio (sim/wall): {drift['avg_time_ratio']:.3f}x")
         print(f"    Time ratio variance: {drift['time_ratio_variance']:.6f}")
         print(f"    Sim faster than realtime: {drift['sim_faster_than_realtime']}")
         
         breakdown = sys_summary['breakdown_percentages']
-        print(f"\n  📈 Cycle Time Breakdown:")
+        print(f"\n Cycle Time Breakdown:")
         print(f"    Observation:      {breakdown['observation_pct']:5.1f}%")
         print(f"    Inference:        {breakdown['inference_pct']:5.1f}%")
         print(f"    Pred Loop:        {breakdown['pred_loop_pct']:5.1f}%")
@@ -1233,30 +1230,8 @@ def run_dt_simulation(config: DTConfig):
         print(f"    SUMO Step:        {breakdown['sumo_step_pct']:5.1f}%")
         print(f"    Unaccounted:      {breakdown['unaccounted_pct']:5.1f}% ({breakdown['unaccounted_ms']:.1f}ms)")
         
-        if breakdown['unaccounted_pct'] > 10:
-            print(f"    ⚠️  High unaccounted time suggests:")
-            print(f"        - Python interpreter overhead")
-            print(f"        - Garbage collection")
-            print(f"        - OS scheduling delays")
         
         metrics.save_results(config.METRICS_OUTPUT)
-    
-    print("\n" + "="*70)
-    print("💡 KEY INSIGHTS:")
-    if sys_summary:
-        pred_scale = sys_summary['prediction_scale_validation']
-        if pred_scale['training_pred_mean_m'] > 100:
-            print(f"  ✓ Prediction scale ({pred_scale['training_pred_mean_m']:.0f}m) indicates highway speeds")
-        
-        sync = sys_summary['synchronization']
-        if sync['queue_fluctuation_range'] > 20:
-            print(f"  ⚠️  Queue fluctuation ({sync['queue_fluctuation_range']}) suggests traffic variability")
-        
-        breakdown = sys_summary['breakdown_percentages']
-        if breakdown['visualization_pct'] > 10:
-            print(f"  💡 Visualization overhead ({breakdown['visualization_pct']:.1f}%) - consider disabling for production")
-    
-    print("="*70 + "\n")
     
     return traj_summary, sys_summary
 
