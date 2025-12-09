@@ -1,9 +1,375 @@
-# models_improved.py
+# models.py
 import torch
 import torch.nn as nn
 import math
 import torch.nn.functional as F
 
+# ==================== Vanilla LSTM ====================
+class VanillaLSTM(nn.Module):
+    """
+    Basic LSTM for trajectory prediction without social context.
+    Input: target sequence of shape (B, obs_len, feat_dim=7)
+    Output: predicted displacements (B, pred_len, 2) in agent frame
+    """
+    def __init__(self, input_dim=7, hidden_dim=128, output_dim=2, obs_len=20, pred_len=25, num_layers=2):
+        super().__init__()
+        self.obs_len = obs_len
+        self.pred_len = pred_len
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        
+        # Encoder LSTM
+        self.encoder = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=0.1)
+        
+        # Decoder LSTM
+        self.decoder = nn.LSTM(output_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=0.1)
+        
+        # Output layer
+        self.output_layer = nn.Linear(hidden_dim, output_dim)
+        
+    def forward(self, target, neigh_dyn, neigh_spatial, lane, pred_len=None):
+        B = target.shape[0]
+        pred_len = self.pred_len if pred_len is None else pred_len
+        
+        # Encode observed trajectory
+        _, (h_n, c_n) = self.encoder(target)  # h_n: (num_layers, B, H)
+        
+        # Decode autoregressively
+        outputs = []
+        decoder_input = torch.zeros(B, 1, 2, device=target.device)
+        h_dec, c_dec = h_n, c_n
+        
+        for t in range(pred_len):
+            out, (h_dec, c_dec) = self.decoder(decoder_input, (h_dec, c_dec))
+            pred_step = self.output_layer(out.squeeze(1))  # (B, 2)
+            outputs.append(pred_step.unsqueeze(1))
+            decoder_input = pred_step.unsqueeze(1)
+            
+        return torch.cat(outputs, dim=1)  # (B, pred_len, 2)
+
+
+# ==================== CS-LSTM (Convolutional Social LSTM) ====================
+class CSLSTM(nn.Module):
+    """
+    CS-LSTM: Uses convolutional social pooling to aggregate neighbor information.
+    Based on: "Convolutional Social Pooling for Vehicle Trajectory Prediction"
+    """
+    def __init__(self, input_dim=7, hidden_dim=128, output_dim=2, obs_len=20, pred_len=25, 
+                 k_neighbors=8, grid_size=8):
+        super().__init__()
+        self.obs_len = obs_len
+        self.pred_len = pred_len
+        self.hidden_dim = hidden_dim
+        self.grid_size = grid_size
+        
+        # Target encoder
+        self.encoder = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        
+        # Neighbor encoder
+        self.neighbor_encoder = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        
+        # Convolutional social pooling
+        self.social_conv = nn.Sequential(
+            nn.Conv2d(hidden_dim, hidden_dim // 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(hidden_dim // 2, hidden_dim // 4, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveMaxPool2d(1)
+        )
+        
+        # Fusion layer
+        self.fusion = nn.Linear(hidden_dim + hidden_dim // 4, hidden_dim)
+        
+        # Decoder
+        self.decoder = nn.LSTM(output_dim, hidden_dim, batch_first=True)
+        self.output_layer = nn.Linear(hidden_dim, output_dim)
+        
+    def social_pooling(self, target_hidden, neighbor_hiddens):
+        """Create spatial grid and apply convolutional pooling"""
+        B = target_hidden.shape[0]
+        
+        # Create grid representation
+        grid = torch.zeros(B, self.hidden_dim, self.grid_size, self.grid_size, 
+                          device=target_hidden.device)
+        
+        # Place target in center
+        center = self.grid_size // 2
+        grid[:, :, center, center] = target_hidden
+        
+        # Place neighbors in grid (simplified spatial mapping)
+        if neighbor_hiddens.shape[1] > 0:
+            for i in range(min(neighbor_hiddens.shape[1], self.grid_size * self.grid_size - 1)):
+                x = (i + 1) % self.grid_size
+                y = (i + 1) // self.grid_size
+                grid[:, :, y, x] = neighbor_hiddens[:, i, :]
+        
+        # Apply convolutional pooling
+        pooled = self.social_conv(grid).squeeze(-1).squeeze(-1)  # (B, H//4)
+        return pooled
+        
+    def forward(self, target, neigh_dyn, neigh_spatial, lane, pred_len=None):
+        B = target.shape[0]
+        K = neigh_dyn.shape[1]
+        pred_len = self.pred_len if pred_len is None else pred_len
+        
+        # Encode target
+        _, (h_target, c_target) = self.encoder(target)
+        h_target = h_target.squeeze(0)  # (B, H)
+        
+        # Encode neighbors
+        if K > 0:
+            neigh_flat = neigh_dyn.reshape(-1, neigh_dyn.shape[2], neigh_dyn.shape[3])
+            _, (h_neigh, _) = self.neighbor_encoder(neigh_flat)
+            h_neigh = h_neigh.squeeze(0).view(B, K, self.hidden_dim)
+        else:
+            h_neigh = torch.zeros(B, 0, self.hidden_dim, device=target.device)
+        
+        # Social pooling
+        social_context = self.social_pooling(h_target, h_neigh)
+        
+        # Fuse target and social context
+        fused = torch.tanh(self.fusion(torch.cat([h_target, social_context], dim=-1)))
+        h_dec = fused.unsqueeze(0)
+        c_dec = torch.zeros_like(h_dec)
+        
+        # Decode
+        outputs = []
+        decoder_input = torch.zeros(B, 1, 2, device=target.device)
+        for t in range(pred_len):
+            out, (h_dec, c_dec) = self.decoder(decoder_input, (h_dec, c_dec))
+            pred_step = self.output_layer(out.squeeze(1))
+            outputs.append(pred_step.unsqueeze(1))
+            decoder_input = pred_step.unsqueeze(1)
+            
+        return torch.cat(outputs, dim=1)
+
+
+# ==================== Social-GAN ====================
+class SocialGAN(nn.Module):
+    """
+    Social-GAN: Generative adversarial network for socially acceptable trajectories.
+    Simplified version focusing on the generator with social pooling.
+    """
+    def __init__(self, input_dim=7, hidden_dim=128, output_dim=2, obs_len=20, pred_len=25,
+                 k_neighbors=8, noise_dim=8, pooling_type='pool_net'):
+        super().__init__()
+        self.obs_len = obs_len
+        self.pred_len = pred_len
+        self.hidden_dim = hidden_dim
+        self.noise_dim = noise_dim
+        
+        # Target encoder
+        self.encoder = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        
+        # Neighbor encoder
+        self.neighbor_encoder = nn.LSTM(input_dim, hidden_dim // 2, batch_first=True)
+        
+        # Social pooling MLP
+        self.pooling_mlp = nn.Sequential(
+            nn.Linear(hidden_dim + hidden_dim // 2, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU()
+        )
+        
+        # Noise injection
+        self.noise_encoder = nn.Linear(noise_dim, hidden_dim // 4)
+        
+        # Fusion
+        self.fusion = nn.Linear(hidden_dim + hidden_dim // 2 + hidden_dim // 4, hidden_dim)
+        
+        # Decoder
+        self.decoder = nn.LSTM(output_dim, hidden_dim, batch_first=True)
+        self.output_layer = nn.Linear(hidden_dim, output_dim)
+        
+    def social_pool(self, target_hidden, neighbor_hiddens):
+        """Pool social information using MLP"""
+        B = target_hidden.shape[0]
+        K = neighbor_hiddens.shape[1]
+        
+        if K == 0:
+            return torch.zeros(B, self.hidden_dim // 2, device=target_hidden.device)
+        
+        # Repeat target for each neighbor
+        target_repeated = target_hidden.unsqueeze(1).repeat(1, K, 1)  # (B, K, H)
+        
+        # Concatenate and pool
+        combined = torch.cat([target_repeated, neighbor_hiddens], dim=-1)  # (B, K, H + H//2)
+        pooled = self.pooling_mlp(combined)  # (B, K, H//2)
+        pooled = torch.max(pooled, dim=1)[0]  # Max pooling over neighbors
+        
+        return pooled
+        
+    def forward(self, target, neigh_dyn, neigh_spatial, lane, pred_len=None, noise=None):
+        B = target.shape[0]
+        K = neigh_dyn.shape[1]
+        pred_len = self.pred_len if pred_len is None else pred_len
+        
+        # Generate noise if not provided
+        if noise is None:
+            noise = torch.randn(B, self.noise_dim, device=target.device)
+        
+        # Encode target
+        _, (h_target, c_target) = self.encoder(target)
+        h_target = h_target.squeeze(0)
+        
+        # Encode neighbors
+        if K > 0:
+            neigh_flat = neigh_dyn.reshape(-1, neigh_dyn.shape[2], neigh_dyn.shape[3])
+            _, (h_neigh, _) = self.neighbor_encoder(neigh_flat)
+            h_neigh = h_neigh.squeeze(0).view(B, K, self.hidden_dim // 2)
+        else:
+            h_neigh = torch.zeros(B, 0, self.hidden_dim // 2, device=target.device)
+        
+        # Social pooling
+        social_context = self.social_pool(h_target, h_neigh)
+        
+        # Encode noise
+        noise_encoded = torch.tanh(self.noise_encoder(noise))
+        
+        # Fuse all contexts
+        fused = torch.tanh(self.fusion(torch.cat([h_target, social_context, noise_encoded], dim=-1)))
+        h_dec = fused.unsqueeze(0)
+        c_dec = torch.zeros_like(h_dec)
+        
+        # Decode
+        outputs = []
+        decoder_input = torch.zeros(B, 1, 2, device=target.device)
+        for t in range(pred_len):
+            out, (h_dec, c_dec) = self.decoder(decoder_input, (h_dec, c_dec))
+            pred_step = self.output_layer(out.squeeze(1))
+            outputs.append(pred_step.unsqueeze(1))
+            decoder_input = pred_step.unsqueeze(1)
+            
+        return torch.cat(outputs, dim=1)
+
+
+# ==================== GNN (Graph Neural Network) ====================
+class GNNTrajectoryPredictor(nn.Module):
+    """
+    GNN-based trajectory prediction using graph attention networks.
+    Vehicles are nodes, spatial relations are edges.
+    """
+    def __init__(self, input_dim=7, hidden_dim=128, output_dim=2, obs_len=20, pred_len=25,
+                 k_neighbors=8, num_gnn_layers=3):
+        super().__init__()
+        self.obs_len = obs_len
+        self.pred_len = pred_len
+        self.hidden_dim = hidden_dim
+        self.num_gnn_layers = num_gnn_layers
+        
+        # Node feature encoder
+        self.node_encoder = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        
+        # Edge feature encoder (spatial relations)
+        self.edge_encoder = nn.Sequential(
+            nn.Linear(18, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, hidden_dim // 4)
+        )
+        
+        # Graph Attention Layers
+        self.gnn_layers = nn.ModuleList([
+            GraphAttentionLayer(hidden_dim, hidden_dim, hidden_dim // 4)
+            for _ in range(num_gnn_layers)
+        ])
+        
+        # Decoder
+        self.decoder = nn.LSTM(output_dim, hidden_dim, batch_first=True)
+        self.output_layer = nn.Linear(hidden_dim, output_dim)
+        
+    def forward(self, target, neigh_dyn, neigh_spatial, lane, pred_len=None):
+        B = target.shape[0]
+        K = neigh_dyn.shape[1]
+        pred_len = self.pred_len if pred_len is None else pred_len
+        
+        # Encode target node
+        _, (h_target, c_target) = self.node_encoder(target)
+        h_target = h_target.squeeze(0)  # (B, H)
+        
+        # Encode neighbor nodes
+        if K > 0:
+            neigh_flat = neigh_dyn.reshape(-1, neigh_dyn.shape[2], neigh_dyn.shape[3])
+            _, (h_neigh, _) = self.node_encoder(neigh_flat)
+            h_neigh = h_neigh.squeeze(0).view(B, K, self.hidden_dim)
+            
+            # Encode edge features (spatial relations)
+            edge_feat = neigh_spatial.reshape(B, K, self.obs_len, 18)
+            edge_feat = edge_feat[:, :, -1, :]  # Use last timestep
+            edge_feat = self.edge_encoder(edge_feat)  # (B, K, H//4)
+            
+            # Stack target and neighbors
+            all_nodes = torch.cat([h_target.unsqueeze(1), h_neigh], dim=1)  # (B, K+1, H)
+            
+            # Apply GNN layers
+            for gnn_layer in self.gnn_layers:
+                all_nodes = gnn_layer(all_nodes, edge_feat)
+            
+            # Extract updated target representation
+            h_target = all_nodes[:, 0, :]
+        
+        # Decode
+        h_dec = h_target.unsqueeze(0)
+        c_dec = torch.zeros_like(h_dec)
+        outputs = []
+        decoder_input = torch.zeros(B, 1, 2, device=target.device)
+        
+        for t in range(pred_len):
+            out, (h_dec, c_dec) = self.decoder(decoder_input, (h_dec, c_dec))
+            pred_step = self.output_layer(out.squeeze(1))
+            outputs.append(pred_step.unsqueeze(1))
+            decoder_input = pred_step.unsqueeze(1)
+            
+        return torch.cat(outputs, dim=1)
+
+
+class GraphAttentionLayer(nn.Module):
+    """Graph Attention Layer for message passing"""
+    def __init__(self, in_dim, out_dim, edge_dim):
+        super().__init__()
+        self.W = nn.Linear(in_dim, out_dim)
+        self.W_edge = nn.Linear(edge_dim, out_dim)
+        self.attn = nn.Linear(out_dim * 3, 1)
+        self.layer_norm = nn.LayerNorm(out_dim)
+        
+    def forward(self, nodes, edge_features):
+        """
+        nodes: (B, N, in_dim) where N = K+1 (target + K neighbors)
+        edge_features: (B, K, edge_dim) - features from target to each neighbor
+        """
+        B, N = nodes.shape[0], nodes.shape[1]
+        
+        # Transform node features
+        h = self.W(nodes)  # (B, N, out_dim)
+        
+        # Target node (index 0)
+        target = h[:, 0:1, :].repeat(1, N-1, 1)  # (B, K, out_dim)
+        neighbors = h[:, 1:, :]  # (B, K, out_dim)
+        
+        if N == 1:  # No neighbors
+            return self.layer_norm(h)
+        
+        # Transform edge features
+        edge_h = self.W_edge(edge_features)  # (B, K, out_dim)
+        
+        # Attention scores
+        attn_input = torch.cat([target, neighbors, edge_h], dim=-1)  # (B, K, 3*out_dim)
+        attn_scores = torch.softmax(self.attn(attn_input), dim=1)  # (B, K, 1)
+        
+        # Aggregate neighbor information
+        messages = (neighbors * attn_scores).sum(dim=1, keepdim=True)  # (B, 1, out_dim)
+        
+        # Update target node
+        h_target_new = h[:, 0:1, :] + messages
+        h_neighbors_new = h[:, 1:, :]
+        
+        # Combine
+        h_new = torch.cat([h_target_new, h_neighbors_new], dim=1)
+        
+        return self.layer_norm(h_new)
+
+
+# ==================== Original Models ====================
 class SimpleSLSTM(nn.Module):
     """
     Simple Social-LSTM-like baseline.
@@ -114,7 +480,7 @@ class ImprovedTrajectoryTransformer(nn.Module):
     4. Optional: teacher-forced constant-velocity residual warm-up
     """
     def __init__(self, d_model=256, nhead=8, num_layers=4, pred_len=25, k_neighbors=8,
-                 use_cv_warmup=True):   # <-- new toggle
+                 use_cv_warmup=True):
         super().__init__()
         self.d_model = d_model
         self.pred_len = pred_len
@@ -188,15 +554,13 @@ class ImprovedTrajectoryTransformer(nn.Module):
         decoded = self.decoder(queries, memory, tgt_mask=tgt_mask)
         preds = self.output_head(decoded)  # (B, T_pred, 2)
 
-        # ---  Teacher-forced CV Residual Warm-up (3 lines) ---
+        # Teacher-forced CV Residual Warm-up
         if self.training and self.use_cv_warmup and (train_stage == 1 or train_stage is None):
-            # estimate constant-velocity baseline from last two obs
-            v_last = target[:, -1, :2] - target[:, -2, :2]       # (B,2)
+            v_last = target[:, -1, :2] - target[:, -2, :2]
             t = torch.arange(1, current_pred_len+1, device=target.device).float().view(1, -1, 1)
-            cv_baseline = last_obs_pos.unsqueeze(1) + t * v_last.unsqueeze(1)  # (B,T,2)
-            preds = preds + cv_baseline  # learn residual around CV baseline
+            cv_baseline = last_obs_pos.unsqueeze(1) + t * v_last.unsqueeze(1)
+            preds = preds + cv_baseline
         elif last_obs_pos is not None:
             preds = preds + last_obs_pos.unsqueeze(1)
-        # -------------------------------------------------------
 
         return preds

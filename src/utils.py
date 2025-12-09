@@ -20,6 +20,111 @@ def ade_fde(preds, gts):
     FDE = fde_per.mean()
     return float(ADE), float(FDE)
 
+
+def compute_accuracy_precision(preds, gts, thresholds=[0.5, 1.0, 2.0]):
+    """
+    Compute trajectory prediction accuracy and precision metrics.
+    
+    Args:
+        preds: numpy arrays (N, T, 2) predicted trajectories
+        gts: numpy arrays (N, T, 2) ground truth trajectories
+        thresholds: list of distance thresholds in meters
+    
+    Returns:
+        dict with accuracy and precision metrics for each threshold
+    """
+    assert preds.shape == gts.shape
+    dists = np.linalg.norm(preds - gts, axis=-1)  # (N, T)
+    
+    metrics = {}
+    
+    for thresh in thresholds:
+        # Accuracy: percentage of predictions within threshold
+        within_thresh = (dists <= thresh).astype(float)
+        
+        # Per-timestep accuracy
+        timestep_acc = within_thresh.mean(axis=0)  # (T,)
+        
+        # Overall accuracy (all points within threshold)
+        overall_acc = within_thresh.mean()
+        
+        # Final displacement accuracy
+        final_acc = (dists[:, -1] <= thresh).mean()
+        
+        # Average per-trajectory accuracy
+        per_traj_acc = within_thresh.mean(axis=1)  # (N,)
+        
+        # Precision: what percentage of trajectories are "good" (>80% points within thresh)
+        good_trajectories = (per_traj_acc >= 0.8).mean()
+        
+        metrics[f'accuracy_{thresh}m'] = float(overall_acc)
+        metrics[f'final_accuracy_{thresh}m'] = float(final_acc)
+        metrics[f'precision_{thresh}m'] = float(good_trajectories)
+        metrics[f'timestep_accuracy_{thresh}m'] = timestep_acc.tolist()
+    
+    # Additional metrics
+    metrics['mean_error'] = float(dists.mean())
+    metrics['median_error'] = float(np.median(dists))
+    metrics['std_error'] = float(dists.std())
+    metrics['max_error'] = float(dists.max())
+    metrics['min_error'] = float(dists.min())
+    
+    # Success rate (trajectories with FDE < 2.0m)
+    metrics['success_rate_2m'] = float((dists[:, -1] < 2.0).mean())
+    
+    return metrics
+
+
+def compute_classification_metrics(preds, gts, threshold=1.0):
+    """
+    Compute classification-style metrics treating trajectory prediction
+    as binary classification (within threshold = positive).
+    
+    Args:
+        preds: numpy arrays (N, T, 2) predicted trajectories
+        gts: numpy arrays (N, T, 2) ground truth trajectories
+        threshold: distance threshold in meters for "correct" prediction
+    
+    Returns:
+        dict with precision, recall, F1-score
+    """
+    dists = np.linalg.norm(preds - gts, axis=-1)  # (N, T)
+    
+    # Binary classification: within threshold or not
+    predictions_correct = (dists <= threshold).astype(int)
+    
+    # Flatten for overall metrics
+    y_pred = predictions_correct.flatten()
+    y_true = np.ones_like(y_pred)  # All should be within threshold ideally
+    
+    # True Positives: predicted within threshold (correct)
+    tp = y_pred.sum()
+    # False Negatives: predicted outside threshold (incorrect)
+    fn = (1 - y_pred).sum()
+    # Total predictions
+    total = len(y_pred)
+    
+    # Precision: of all predictions, how many are within threshold
+    precision = tp / total if total > 0 else 0.0
+    
+    # Recall: same as precision in this formulation (all should be correct)
+    recall = precision
+    
+    # F1 Score
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    
+    # Per-sample metrics
+    per_sample_accuracy = predictions_correct.mean(axis=1)
+    
+    return {
+        'precision': float(precision),
+        'recall': float(recall),
+        'f1_score': float(f1),
+        'mean_sample_accuracy': float(per_sample_accuracy.mean()),
+        'median_sample_accuracy': float(np.median(per_sample_accuracy)),
+    }
+
+
 def cumulate_deltas(last_pos, deltas):
     """
     last_pos: (B,2) last observed position (in agent frame) typically (0,0) if agent-centric
@@ -28,6 +133,7 @@ def cumulate_deltas(last_pos, deltas):
     """
     cum = np.cumsum(deltas, axis=1)
     return cum + last_pos[:, None, :]
+
 
 def torch_cumulate_deltas(last_pos, deltas):
     """
@@ -38,7 +144,9 @@ def torch_cumulate_deltas(last_pos, deltas):
     cum = torch.cumsum(deltas, dim=1)
     return cum + last_pos.unsqueeze(1)
 
+
 def plot_prediction_one(obs_world, gt_world, pred_world, save_path='pred.png'):
+    import matplotlib.pyplot as plt
     plt.figure(figsize=(6,4))
     obs_world = np.array(obs_world)
     gt_world = np.array(gt_world)
@@ -51,12 +159,15 @@ def plot_prediction_one(obs_world, gt_world, pred_world, save_path='pred.png'):
     plt.savefig(save_path)
     plt.close()
 
+
 def save_json(obj, p):
     with open(p, 'w') as f:
         json.dump(obj, f, indent=2)
 
+
 def load_model_state(model, path):
     model.load_state_dict(torch.load(path, map_location='cpu'))
+
 
 # ----------------------------
 # Trajectory loss (position + velocity + acceleration consistency)

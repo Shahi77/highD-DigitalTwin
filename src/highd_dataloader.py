@@ -3,7 +3,7 @@ import os, math, numpy as np, pandas as pd, torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 
 # defaults
-DOWNSAMPLE, OBS_LEN, PRED_LEN, K_NEIGH, MAX_SPEED = 5, 20, 25, 8, 50.0
+DOWNSAMPLE, OBS_LEN, PRED_LEN, K_NEIGH, MAX_SPEED = 1, 20, 20, 8, 50.0
 
 # -------------------------------------------------------------------------
 # Scene loading
