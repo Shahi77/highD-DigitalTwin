@@ -28,7 +28,10 @@ from traci import constants as tc
 @dataclass
 class DTConfig:
     MODEL_TYPE: str = "slstm"
-    MODEL_PATH: str = "/Users/shahi/Developer/Project-highD/results/results_scene02_lstm/checkpoints/best_model.pt"
+   # MODEL_PATH: str = "/Users/shahi/Developer/Project-highD/results/results_scene02_lstm/checkpoints/best_model.pt" #scene02
+    MODEL_PATH: str = "/Users/shahi/Developer/Project-highD/results/results_wholeDataset_slstm/best_slstm.pt"  # slstm whole dataset
+        
+    # Prediction parameters
     OBS_LEN: int = 20
     PRED_LEN: int = 20
     K_NEIGHBORS: int = 8
@@ -357,7 +360,7 @@ class EnhancedMetricsCollector:
         with open(filepath, 'w') as f:
             json.dump(results, f, indent=2)
         
-        print(f"\n✅ Saved metrics to {filepath}")
+        print(f"\n Saved metrics to {filepath}")
 
 
 def load_model(model_path: str, model_type: str, pred_len: int):
@@ -370,7 +373,7 @@ def load_model(model_path: str, model_type: str, pred_len: int):
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
-    print(f"✓ Loaded {model_type.upper()} model")
+    print(f" Loaded {model_type.upper()} model")
     return model
 
 
@@ -583,7 +586,7 @@ class DigitalTwinPredictor:
             self.prediction_scale_stats.append(pred_magnitude)
             
             if pred_magnitude > self.config.MAX_PREDICTION_DISTANCE:
-                print(f"⚠️  Suspicious prediction for {vehicle_id}: {pred_magnitude:.1f}m")
+                print(f"  Suspicious prediction for {vehicle_id}: {pred_magnitude:.1f}m")
                 return False
             
             # Create prediction record
@@ -924,7 +927,7 @@ class DigitalTwinPredictor:
     def print_scale_stats(self):
         if self.prediction_scale_stats:
             stats = np.array(self.prediction_scale_stats)
-            print(f"\n📊 Prediction Scale Stats:")
+            print(f"\n Prediction Scale Stats:")
             print(f"  Mean distance: {np.mean(stats):.2f}m")
             print(f"  Median: {np.median(stats):.2f}m")
             print(f"  Std: {np.std(stats):.2f}m")
@@ -1240,7 +1243,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str,
-                       default="/Users/shahi/Developer/Project-highD/results/results_scene02_lstm/checkpoints/best_model.pt")
+                       default="/Users/shahi/Developer/Project-highD/results/results_wholeDataset_slstm/best_slstm.pt")
     parser.add_argument("--model_type", choices=["slstm", "transformer"], default="slstm")
     parser.add_argument("--gui", action="store_true", default=True)
     parser.add_argument("--no_rotation", action="store_true", help="Disable rotation normalization")
@@ -1249,7 +1252,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_viz", action="store_true", help="Disable visualization")
     parser.add_argument("--no_gt_viz", action="store_true", help="Disable ground truth visualization")
     parser.add_argument("--total_time", type=int, default=4000)
-    parser.add_argument("--output", type=str, default="./dt_results/dt_system_metrics.json")
+    parser.add_argument("--output", type=str, default="./dt_results_wholeDataset/dt_metrics.json")
     
     args = parser.parse_args()
     

@@ -1,0 +1,194 @@
+{
+  "trajectory_accuracy": {
+    "ADE_mean": 104.44981419175983,
+    "ADE_std": 74.49641220846758,
+    "ADE_median": 143.81895351631744,
+    "ADE_min": 8.305180332225365,
+    "ADE_max": 186.2838859285211,
+    "FDE_mean": 200.63473178057234,
+    "FDE_std": 126.68495803960333,
+    "FDE_median": 268.5460446289134,
+    "FDE_min": 20.924043157217284,
+    "FDE_max": 338.0279897857779
+  },
+  "latency_metrics": {
+    "inference_latency_mean_ms": 2.8506994247436523,
+    "inference_latency_std_ms": 0.23059297355770889,
+    "inference_latency_p50_ms": 2.8094053268432617,
+    "inference_latency_p95_ms": 3.1902670860290527,
+    "inference_latency_p99_ms": 3.259704113006592,
+    "e2e_latency_mean_ms": 3.821086883544922,
+    "e2e_latency_std_ms": 0.2546674902329574,
+    "latency_jitter_ms": 0.23059297355770889
+  },
+  "synchronization_metrics": {
+    "frame_alignment_ratio": 1.0,
+    "temporal_drift_mean_ms": 0.0,
+    "temporal_drift_std_ms": 0.0,
+    "update_synchrony_index": 0.0
+  },
+  "responsiveness_metrics": {
+    "prediction_refresh_rate_hz": 0.01642390114929654,
+    "adaptation_success_ratio": 1.0,
+    "avg_response_time_ms": 3.821086883544922
+  },
+  "composite_metrics": {
+    "digital_twin_coherence_index": 0.30379327363510195,
+    "computational_efficiency_pred_per_sec": 350.79110456898644,
+    "temporal_integrity_loss": NaN
+  },
+  "performance_summary": {
+    "total_predictions": 10,
+    "failed_predictions": 0,
+    "success_rate": 1.0,
+    "total_runtime_sec": 608.869072675705
+  },
+  "raw_predictions_sample": [
+    {
+      "vehicle_id": "d2_8",
+      "timestamp": 55.0,
+      "ade": 186.2838859285211,
+      "fde": 338.0279897857779,
+      "mae": 93.15780130457651,
+      "rmse": 149.63394530661563,
+      "inference_latency_ms": 3.0028820037841797,
+      "e2e_latency_ms": 3.99017333984375,
+      "speed_mae": 23.028475829183947,
+      "acc_mae": 0.0801045055660896,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d2_15",
+      "timestamp": 67.0,
+      "ade": 129.29447341094786,
+      "fde": 244.53285928997195,
+      "mae": 64.65742070086361,
+      "rmse": 104.28454338356487,
+      "inference_latency_ms": 2.5811195373535156,
+      "e2e_latency_ms": 3.5359859466552734,
+      "speed_mae": 4.491748937869786,
+      "acc_mae": 0.04370797531256181,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d2_14",
+      "timestamp": 75.0,
+      "ade": 178.81345368632955,
+      "fde": 325.2914797918625,
+      "mae": 89.42190355087807,
+      "rmse": 143.6876430664245,
+      "inference_latency_ms": 2.7277469635009766,
+      "e2e_latency_ms": 3.7207603454589844,
+      "speed_mae": 20.463819541708435,
+      "acc_mae": 0.06984499744305595,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d2_13",
+      "timestamp": 77.0,
+      "ade": 171.3832811933828,
+      "fde": 311.96636465972244,
+      "mae": 85.70645494710189,
+      "rmse": 137.75351833961736,
+      "inference_latency_ms": 3.0841827392578125,
+      "e2e_latency_ms": 4.10008430480957,
+      "speed_mae": 17.787480961929692,
+      "acc_mae": 0.09632910595621076,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d2_11",
+      "timestamp": 86.0,
+      "ade": 160.25955213441227,
+      "fde": 295.2620635641321,
+      "mae": 80.14328156967338,
+      "rmse": 129.08003793710873,
+      "inference_latency_ms": 3.045797348022461,
+      "e2e_latency_ms": 4.051923751831055,
+      "speed_mae": 14.398169771462793,
+      "acc_mae": 0.20401335604185983,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d2_10",
+      "timestamp": 87.0,
+      "ade": 158.34343362168698,
+      "fde": 292.5592299678549,
+      "mae": 79.18467318035144,
+      "rmse": 127.50608195069277,
+      "inference_latency_ms": 2.599954605102539,
+      "e2e_latency_ms": 3.4918785095214844,
+      "speed_mae": 13.868429012037591,
+      "acc_mae": 0.11068576417975944,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d1_9",
+      "timestamp": 89.0,
+      "ade": 21.21947588943767,
+      "fde": 76.71017615357331,
+      "mae": 10.633090160264226,
+      "rmse": 22.18214415095228,
+      "inference_latency_ms": 2.891063690185547,
+      "e2e_latency_ms": 3.8619041442871094,
+      "speed_mae": 15.960617788985175,
+      "acc_mae": 0.09913074513877225,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d1_75",
+      "timestamp": 340.0,
+      "ade": 21.874755345138663,
+      "fde": 79.13898910666161,
+      "mae": 10.961277697286732,
+      "rmse": 22.97711146183358,
+      "inference_latency_ms": 2.638101577758789,
+      "e2e_latency_ms": 3.5712718963623047,
+      "speed_mae": 16.470599408840666,
+      "acc_mae": 0.058369746079066726,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d1_60",
+      "timestamp": 345.0,
+      "ade": 8.720650375515921,
+      "fde": 21.93412232894927,
+      "mae": 4.371419668295585,
+      "rmse": 7.254693609180735,
+      "inference_latency_ms": 2.6590824127197266,
+      "e2e_latency_ms": 3.631114959716797,
+      "speed_mae": 4.450152001802024,
+      "acc_mae": 0.06918202421031226,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    },
+    {
+      "vehicle_id": "d1_50",
+      "timestamp": 354.0,
+      "ade": 8.305180332225365,
+      "fde": 20.924043157217284,
+      "mae": 4.163732665698467,
+      "rmse": 6.8858331393491055,
+      "inference_latency_ms": 3.2770633697509766,
+      "e2e_latency_ms": 4.255771636962891,
+      "speed_mae": 4.269563118093475,
+      "acc_mae": 0.03821252696610226,
+      "frame_alignment": 1.0,
+      "temporal_drift_ms": 0.0
+    }
+  ],
+  "configuration": {
+    "prediction_interval_ms": 250,
+    "prediction_horizon_frames": 20,
+    "dt_mode_enabled": true,
+    "dt_timestep_s": 0.25
+  }
+}

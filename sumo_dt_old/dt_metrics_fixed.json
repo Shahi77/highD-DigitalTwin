@@ -1,0 +1,1030 @@
+{
+  "trajectory_accuracy": {
+    "ADE_mean": 66.01871980345479,
+    "ADE_std": 44.73189197965482,
+    "ADE_median": 46.496460875286644,
+    "ADE_min": 0.12032924527222622,
+    "ADE_max": 127.88942967786278,
+    "FDE_mean": 87.68928645591242,
+    "FDE_std": 73.08607034592788,
+    "FDE_median": 45.83765839928746,
+    "FDE_min": 0.014462667784465472,
+    "FDE_max": 190.2612463452732
+  },
+  "latency_metrics": {
+    "inference_mean_ms": 2.777333136147691,
+    "inference_std_ms": 0.8404562414304911,
+    "inference_p95_ms": 3.422975540161133,
+    "inference_p99_ms": 4.177417755126955,
+    "e2e_mean_ms": 2.777575920532514,
+    "e2e_std_ms": 0.8405291747442102
+  },
+  "performance_summary": {
+    "total_predictions": 13598,
+    "unique_vehicles": 78,
+    "avg_gt_frames": 8.0,
+    "simulation_time_s": 125.26846289634705
+  },
+  "raw_predictions": [
+    {
+      "vehicle_id": "d1_75",
+      "prediction_step": 908,
+      "ade": 31.230099568066827,
+      "fde": 22.32843161816609,
+      "inference_latency_ms": 2.794981002807617,
+      "e2e_latency_ms": 2.794981002807617,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_78",
+      "prediction_step": 908,
+      "ade": 4.900763962188009,
+      "fde": 8.918625554498592,
+      "inference_latency_ms": 2.9549598693847656,
+      "e2e_latency_ms": 2.9549598693847656,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_80",
+      "prediction_step": 908,
+      "ade": 10.516590126041145,
+      "fde": 18.422859938408877,
+      "inference_latency_ms": 2.794981002807617,
+      "e2e_latency_ms": 2.794981002807617,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_81",
+      "prediction_step": 908,
+      "ade": 8.742264161348274,
+      "fde": 15.32527710846294,
+      "inference_latency_ms": 2.843141555786133,
+      "e2e_latency_ms": 2.843141555786133,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_82",
+      "prediction_step": 908,
+      "ade": 13.232682051406071,
+      "fde": 23.347759413578615,
+      "inference_latency_ms": 2.9289722442626953,
+      "e2e_latency_ms": 2.9289722442626953,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_83",
+      "prediction_step": 908,
+      "ade": 14.772546741219635,
+      "fde": 26.017126061332913,
+      "inference_latency_ms": 2.7260780334472656,
+      "e2e_latency_ms": 2.7260780334472656,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_84",
+      "prediction_step": 908,
+      "ade": 14.005002462238778,
+      "fde": 24.789462383267793,
+      "inference_latency_ms": 2.866029739379883,
+      "e2e_latency_ms": 2.866029739379883,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d1_85",
+      "prediction_step": 908,
+      "ade": 10.744449088573644,
+      "fde": 18.92463021433863,
+      "inference_latency_ms": 2.8200149536132812,
+      "e2e_latency_ms": 2.8200149536132812,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_15",
+      "prediction_step": 908,
+      "ade": 51.65749722248826,
+      "fde": 91.70212931598314,
+      "inference_latency_ms": 2.6988983154296875,
+      "e2e_latency_ms": 2.6988983154296875,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_19",
+      "prediction_step": 908,
+      "ade": 106.05344583921215,
+      "fde": 153.43834206026042,
+      "inference_latency_ms": 3.136157989501953,
+      "e2e_latency_ms": 3.136157989501953,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_21",
+      "prediction_step": 908,
+      "ade": 106.85882609785506,
+      "fde": 154.55667557585303,
+      "inference_latency_ms": 2.936840057373047,
+      "e2e_latency_ms": 2.937793731689453,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_28",
+      "prediction_step": 908,
+      "ade": 77.06335482979428,
+      "fde": 137.18284170035864,
+      "inference_latency_ms": 2.7701854705810547,
+      "e2e_latency_ms": 2.7709007263183594,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_31",
+      "prediction_step": 908,
+      "ade": 107.25043319885681,
+      "fde": 153.9665155913198,
+      "inference_latency_ms": 2.7871131896972656,
+      "e2e_latency_ms": 2.7871131896972656,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_33",
+      "prediction_step": 908,
+      "ade": 106.92059036570106,
+      "fde": 153.1741988134725,
+      "inference_latency_ms": 2.748250961303711,
+      "e2e_latency_ms": 2.748250961303711,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_35",
+      "prediction_step": 908,
+      "ade": 78.52641047903647,
+      "fde": 139.62527274216689,
+      "inference_latency_ms": 2.859830856323242,
+      "e2e_latency_ms": 2.859830856323242,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_42",
+      "prediction_step": 908,
+      "ade": 123.66686299699482,
+      "fde": 182.98307854910382,
+      "inference_latency_ms": 2.7561187744140625,
+      "e2e_latency_ms": 2.7561187744140625,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_45",
+      "prediction_step": 908,
+      "ade": 127.40155465235998,
+      "fde": 189.56974405387126,
+      "inference_latency_ms": 3.0388832092285156,
+      "e2e_latency_ms": 3.0388832092285156,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_47",
+      "prediction_step": 908,
+      "ade": 122.5255022089014,
+      "fde": 180.80733512520698,
+      "inference_latency_ms": 2.7120113372802734,
+      "e2e_latency_ms": 2.7120113372802734,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_51",
+      "prediction_step": 908,
+      "ade": 120.76581023917961,
+      "fde": 177.62090075871313,
+      "inference_latency_ms": 2.8798580169677734,
+      "e2e_latency_ms": 2.8808116912841797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_53",
+      "prediction_step": 908,
+      "ade": 127.19932549321871,
+      "fde": 188.96137712662082,
+      "inference_latency_ms": 2.7570724487304688,
+      "e2e_latency_ms": 2.7570724487304688,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_55",
+      "prediction_step": 908,
+      "ade": 107.63553286052442,
+      "fde": 154.37235052085137,
+      "inference_latency_ms": 2.9282569885253906,
+      "e2e_latency_ms": 2.929210662841797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_59",
+      "prediction_step": 908,
+      "ade": 120.78876058515738,
+      "fde": 177.667339074784,
+      "inference_latency_ms": 2.688169479370117,
+      "e2e_latency_ms": 2.688169479370117,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_65",
+      "prediction_step": 908,
+      "ade": 119.82643060239603,
+      "fde": 175.9366362148656,
+      "inference_latency_ms": 2.724170684814453,
+      "e2e_latency_ms": 2.724170684814453,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_66",
+      "prediction_step": 908,
+      "ade": 106.08813962461565,
+      "fde": 151.4793850294433,
+      "inference_latency_ms": 2.7379989624023438,
+      "e2e_latency_ms": 2.7379989624023438,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_70",
+      "prediction_step": 908,
+      "ade": 124.70031920775358,
+      "fde": 184.448802149031,
+      "inference_latency_ms": 2.8717517852783203,
+      "e2e_latency_ms": 2.8717517852783203,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_73",
+      "prediction_step": 908,
+      "ade": 120.04379786760936,
+      "fde": 176.33616366937923,
+      "inference_latency_ms": 2.695798873901367,
+      "e2e_latency_ms": 2.695798873901367,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_74",
+      "prediction_step": 908,
+      "ade": 111.01468341163022,
+      "fde": 161.1408904155647,
+      "inference_latency_ms": 2.716064453125,
+      "e2e_latency_ms": 2.716064453125,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_76",
+      "prediction_step": 908,
+      "ade": 107.72283652499522,
+      "fde": 154.21730232213034,
+      "inference_latency_ms": 2.8531551361083984,
+      "e2e_latency_ms": 2.8543472290039062,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_79",
+      "prediction_step": 908,
+      "ade": 106.7807436983287,
+      "fde": 152.23457206713516,
+      "inference_latency_ms": 3.0820369720458984,
+      "e2e_latency_ms": 3.0820369720458984,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.25
+    },
+    {
+      "vehicle_id": "d2_29",
+      "prediction_step": 909,
+      "ade": 75.81020422483276,
+      "fde": 134.82302915492406,
+      "inference_latency_ms": 4.345178604125977,
+      "e2e_latency_ms": 4.346132278442383,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.5
+    },
+    {
+      "vehicle_id": "d2_32",
+      "prediction_step": 909,
+      "ade": 79.54187242428543,
+      "fde": 141.57632375635262,
+      "inference_latency_ms": 4.273176193237305,
+      "e2e_latency_ms": 4.275321960449219,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.5
+    },
+    {
+      "vehicle_id": "d2_57",
+      "prediction_step": 909,
+      "ade": 117.88871099966892,
+      "fde": 172.58633357343308,
+      "inference_latency_ms": 3.663778305053711,
+      "e2e_latency_ms": 3.663778305053711,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.5
+    },
+    {
+      "vehicle_id": "d2_68",
+      "prediction_step": 909,
+      "ade": 119.57149743711089,
+      "fde": 175.4749546874878,
+      "inference_latency_ms": 4.37617301940918,
+      "e2e_latency_ms": 4.376888275146484,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.5
+    },
+    {
+      "vehicle_id": "d2_77",
+      "prediction_step": 909,
+      "ade": 117.90982426514367,
+      "fde": 172.53416292458087,
+      "inference_latency_ms": 3.876924514770508,
+      "e2e_latency_ms": 3.877878189086914,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.5
+    },
+    {
+      "vehicle_id": "d1_17",
+      "prediction_step": 910,
+      "ade": 46.872043510923966,
+      "fde": 46.16680618823264,
+      "inference_latency_ms": 3.180980682373047,
+      "e2e_latency_ms": 3.180980682373047,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_23",
+      "prediction_step": 910,
+      "ade": 47.123828719902285,
+      "fde": 46.68019719971805,
+      "inference_latency_ms": 2.8657913208007812,
+      "e2e_latency_ms": 2.8657913208007812,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_25",
+      "prediction_step": 910,
+      "ade": 35.05512946000535,
+      "fde": 25.248231297904734,
+      "inference_latency_ms": 3.1180381774902344,
+      "e2e_latency_ms": 3.1180381774902344,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_26",
+      "prediction_step": 910,
+      "ade": 47.456798509272616,
+      "fde": 47.186997005007335,
+      "inference_latency_ms": 2.8228759765625,
+      "e2e_latency_ms": 2.8228759765625,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_27",
+      "prediction_step": 910,
+      "ade": 30.516674663462794,
+      "fde": 17.143976516649637,
+      "inference_latency_ms": 3.133058547973633,
+      "e2e_latency_ms": 3.133058547973633,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_30",
+      "prediction_step": 910,
+      "ade": 35.358391699281654,
+      "fde": 25.783700414783908,
+      "inference_latency_ms": 2.7282238006591797,
+      "e2e_latency_ms": 2.7282238006591797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_34",
+      "prediction_step": 910,
+      "ade": 45.88394845528826,
+      "fde": 44.39091106900656,
+      "inference_latency_ms": 2.8328895568847656,
+      "e2e_latency_ms": 2.833843231201172,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_36",
+      "prediction_step": 910,
+      "ade": 46.89270110546531,
+      "fde": 46.147356962983025,
+      "inference_latency_ms": 2.7709007263183594,
+      "e2e_latency_ms": 2.7718544006347656,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_37",
+      "prediction_step": 910,
+      "ade": 30.122669704646093,
+      "fde": 16.49505138928132,
+      "inference_latency_ms": 2.758026123046875,
+      "e2e_latency_ms": 2.758026123046875,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_38",
+      "prediction_step": 910,
+      "ade": 28.99402968269478,
+      "fde": 14.440213467923888,
+      "inference_latency_ms": 2.7039051055908203,
+      "e2e_latency_ms": 2.7048587799072266,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_39",
+      "prediction_step": 910,
+      "ade": 30.38935864288134,
+      "fde": 16.869154107774335,
+      "inference_latency_ms": 2.8917789459228516,
+      "e2e_latency_ms": 2.8939247131347656,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_40",
+      "prediction_step": 910,
+      "ade": 28.77222951693246,
+      "fde": 14.116156527572599,
+      "inference_latency_ms": 2.6810169219970703,
+      "e2e_latency_ms": 2.6810169219970703,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_41",
+      "prediction_step": 910,
+      "ade": 46.11230782653374,
+      "fde": 44.70894863727995,
+      "inference_latency_ms": 2.6369094848632812,
+      "e2e_latency_ms": 2.6369094848632812,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_43",
+      "prediction_step": 910,
+      "ade": 33.059605781297314,
+      "fde": 21.624953045420856,
+      "inference_latency_ms": 2.9990673065185547,
+      "e2e_latency_ms": 2.9990673065185547,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_44",
+      "prediction_step": 910,
+      "ade": 33.15040448790922,
+      "fde": 22.757796120153802,
+      "inference_latency_ms": 2.908945083618164,
+      "e2e_latency_ms": 2.908945083618164,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_46",
+      "prediction_step": 910,
+      "ade": 29.748966237344007,
+      "fde": 15.793967964897947,
+      "inference_latency_ms": 2.749204635620117,
+      "e2e_latency_ms": 2.7501583099365234,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_48",
+      "prediction_step": 910,
+      "ade": 33.527344383753515,
+      "fde": 22.44275869185958,
+      "inference_latency_ms": 2.741098403930664,
+      "e2e_latency_ms": 2.7420520782470703,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_49",
+      "prediction_step": 910,
+      "ade": 31.14722106249424,
+      "fde": 18.391179265850077,
+      "inference_latency_ms": 2.627134323120117,
+      "e2e_latency_ms": 2.6280879974365234,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_50",
+      "prediction_step": 910,
+      "ade": 46.65740119411556,
+      "fde": 45.75083316686016,
+      "inference_latency_ms": 2.6710033416748047,
+      "e2e_latency_ms": 2.671957015991211,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_52",
+      "prediction_step": 910,
+      "ade": 31.780916083908693,
+      "fde": 19.33202437928106,
+      "inference_latency_ms": 2.836942672729492,
+      "e2e_latency_ms": 2.836942672729492,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_54",
+      "prediction_step": 910,
+      "ade": 35.49020748544055,
+      "fde": 25.807754129947845,
+      "inference_latency_ms": 2.732992172241211,
+      "e2e_latency_ms": 2.733945846557617,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_56",
+      "prediction_step": 910,
+      "ade": 25.57334520325013,
+      "fde": 8.308347241621751,
+      "inference_latency_ms": 2.6519298553466797,
+      "e2e_latency_ms": 2.6519298553466797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_58",
+      "prediction_step": 910,
+      "ade": 28.64628833889942,
+      "fde": 13.334197299391981,
+      "inference_latency_ms": 2.6738643646240234,
+      "e2e_latency_ms": 2.6738643646240234,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_60",
+      "prediction_step": 910,
+      "ade": 46.29538886697296,
+      "fde": 45.25763395756027,
+      "inference_latency_ms": 2.6733875274658203,
+      "e2e_latency_ms": 2.6733875274658203,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_61",
+      "prediction_step": 910,
+      "ade": 33.85425587327872,
+      "fde": 23.087070235079686,
+      "inference_latency_ms": 2.688884735107422,
+      "e2e_latency_ms": 2.688884735107422,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_62",
+      "prediction_step": 910,
+      "ade": 31.015515699242968,
+      "fde": 17.963265241771584,
+      "inference_latency_ms": 2.8290748596191406,
+      "e2e_latency_ms": 2.8290748596191406,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_63",
+      "prediction_step": 910,
+      "ade": 33.14262466496251,
+      "fde": 21.72919973400544,
+      "inference_latency_ms": 2.772808074951172,
+      "e2e_latency_ms": 2.772808074951172,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_64",
+      "prediction_step": 910,
+      "ade": 33.76122147282747,
+      "fde": 22.805681766876162,
+      "inference_latency_ms": 2.7189254760742188,
+      "e2e_latency_ms": 2.7189254760742188,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_67",
+      "prediction_step": 910,
+      "ade": 33.37744414510627,
+      "fde": 22.148416671350503,
+      "inference_latency_ms": 3.033161163330078,
+      "e2e_latency_ms": 3.033161163330078,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_69",
+      "prediction_step": 910,
+      "ade": 29.882897505957715,
+      "fde": 16.208408700155793,
+      "inference_latency_ms": 2.8438568115234375,
+      "e2e_latency_ms": 2.8450489044189453,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_71",
+      "prediction_step": 910,
+      "ade": 43.31332043765584,
+      "fde": 39.89742439938421,
+      "inference_latency_ms": 2.9282569885253906,
+      "e2e_latency_ms": 2.929210662841797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_72",
+      "prediction_step": 910,
+      "ade": 27.525696345207233,
+      "fde": 12.221266493013218,
+      "inference_latency_ms": 2.7723312377929688,
+      "e2e_latency_ms": 2.7723312377929688,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_75",
+      "prediction_step": 910,
+      "ade": 32.02015852251435,
+      "fde": 22.486548404706316,
+      "inference_latency_ms": 2.6900768280029297,
+      "e2e_latency_ms": 2.691030502319336,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_78",
+      "prediction_step": 910,
+      "ade": 3.9043811178223544,
+      "fde": 7.256723338936654,
+      "inference_latency_ms": 2.6848316192626953,
+      "e2e_latency_ms": 2.6848316192626953,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_80",
+      "prediction_step": 910,
+      "ade": 10.232018873479763,
+      "fde": 17.905856266072412,
+      "inference_latency_ms": 2.701997756958008,
+      "e2e_latency_ms": 2.701997756958008,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_81",
+      "prediction_step": 910,
+      "ade": 8.707462215644217,
+      "fde": 15.275850989694451,
+      "inference_latency_ms": 2.683877944946289,
+      "e2e_latency_ms": 2.683877944946289,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_82",
+      "prediction_step": 910,
+      "ade": 13.23058966197917,
+      "fde": 23.317070170754256,
+      "inference_latency_ms": 2.6900768280029297,
+      "e2e_latency_ms": 2.6900768280029297,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_83",
+      "prediction_step": 910,
+      "ade": 14.722276653290137,
+      "fde": 25.953175538811806,
+      "inference_latency_ms": 2.679586410522461,
+      "e2e_latency_ms": 2.679586410522461,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_84",
+      "prediction_step": 910,
+      "ade": 14.158571125997963,
+      "fde": 25.051544987313623,
+      "inference_latency_ms": 2.956867218017578,
+      "e2e_latency_ms": 2.9578208923339844,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d1_85",
+      "prediction_step": 910,
+      "ade": 10.911908807097737,
+      "fde": 19.24188511076759,
+      "inference_latency_ms": 2.8967857360839844,
+      "e2e_latency_ms": 2.8967857360839844,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_15",
+      "prediction_step": 910,
+      "ade": 52.32670359558335,
+      "fde": 92.96428633522541,
+      "inference_latency_ms": 2.8159618377685547,
+      "e2e_latency_ms": 2.8159618377685547,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_19",
+      "prediction_step": 910,
+      "ade": 105.74882779958483,
+      "fde": 153.3147938274729,
+      "inference_latency_ms": 3.139019012451172,
+      "e2e_latency_ms": 3.139972686767578,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_21",
+      "prediction_step": 910,
+      "ade": 106.84920019806404,
+      "fde": 154.5482276261694,
+      "inference_latency_ms": 2.84576416015625,
+      "e2e_latency_ms": 2.846956253051758,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_28",
+      "prediction_step": 910,
+      "ade": 76.98924227792513,
+      "fde": 137.06736521364255,
+      "inference_latency_ms": 2.8340816497802734,
+      "e2e_latency_ms": 2.8350353240966797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_31",
+      "prediction_step": 910,
+      "ade": 107.20162157934432,
+      "fde": 153.90790532602082,
+      "inference_latency_ms": 2.952098846435547,
+      "e2e_latency_ms": 2.952098846435547,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_33",
+      "prediction_step": 910,
+      "ade": 106.90584256689245,
+      "fde": 153.15927318450508,
+      "inference_latency_ms": 2.763032913208008,
+      "e2e_latency_ms": 2.763032913208008,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_35",
+      "prediction_step": 910,
+      "ade": 78.04269790943432,
+      "fde": 138.72476486066816,
+      "inference_latency_ms": 2.838134765625,
+      "e2e_latency_ms": 2.8390884399414062,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_42",
+      "prediction_step": 910,
+      "ade": 123.65926343803375,
+      "fde": 182.986342631022,
+      "inference_latency_ms": 3.070831298828125,
+      "e2e_latency_ms": 3.072023391723633,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_45",
+      "prediction_step": 910,
+      "ade": 127.40652281269895,
+      "fde": 189.59088787525715,
+      "inference_latency_ms": 2.8378963470458984,
+      "e2e_latency_ms": 2.8378963470458984,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_47",
+      "prediction_step": 910,
+      "ade": 122.54502511668358,
+      "fde": 180.8510946832658,
+      "inference_latency_ms": 2.8579235076904297,
+      "e2e_latency_ms": 2.858877182006836,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_51",
+      "prediction_step": 910,
+      "ade": 120.75163806689818,
+      "fde": 177.6142022530229,
+      "inference_latency_ms": 2.838134765625,
+      "e2e_latency_ms": 2.838134765625,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_53",
+      "prediction_step": 910,
+      "ade": 127.10743961874425,
+      "fde": 188.8446995990245,
+      "inference_latency_ms": 2.821207046508789,
+      "e2e_latency_ms": 2.821207046508789,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_55",
+      "prediction_step": 910,
+      "ade": 107.68624515972645,
+      "fde": 154.49567262936452,
+      "inference_latency_ms": 2.8078556060791016,
+      "e2e_latency_ms": 2.8078556060791016,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_59",
+      "prediction_step": 910,
+      "ade": 120.78931515223212,
+      "fde": 177.6749253542501,
+      "inference_latency_ms": 2.849102020263672,
+      "e2e_latency_ms": 2.850055694580078,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_65",
+      "prediction_step": 910,
+      "ade": 119.78825703316636,
+      "fde": 175.88337715394846,
+      "inference_latency_ms": 2.7718544006347656,
+      "e2e_latency_ms": 2.7718544006347656,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_66",
+      "prediction_step": 910,
+      "ade": 106.09325093538924,
+      "fde": 151.49445997868955,
+      "inference_latency_ms": 2.777099609375,
+      "e2e_latency_ms": 2.777099609375,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_70",
+      "prediction_step": 910,
+      "ade": 124.51898474253898,
+      "fde": 184.1538839549632,
+      "inference_latency_ms": 2.7489662170410156,
+      "e2e_latency_ms": 2.7489662170410156,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_73",
+      "prediction_step": 910,
+      "ade": 120.02422918475885,
+      "fde": 176.2998611357113,
+      "inference_latency_ms": 2.929210662841797,
+      "e2e_latency_ms": 2.929210662841797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_74",
+      "prediction_step": 910,
+      "ade": 111.88389058608783,
+      "fde": 162.62131143486786,
+      "inference_latency_ms": 2.917051315307617,
+      "e2e_latency_ms": 2.917051315307617,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_76",
+      "prediction_step": 910,
+      "ade": 107.68615707477575,
+      "fde": 154.16449542073332,
+      "inference_latency_ms": 2.964019775390625,
+      "e2e_latency_ms": 2.9649734497070312,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_79",
+      "prediction_step": 910,
+      "ade": 106.6669053563715,
+      "fde": 152.07042750667637,
+      "inference_latency_ms": 2.9761791229248047,
+      "e2e_latency_ms": 2.9768943786621094,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 227.75
+    },
+    {
+      "vehicle_id": "d2_29",
+      "prediction_step": 911,
+      "ade": 75.69298262677181,
+      "fde": 134.67589706747472,
+      "inference_latency_ms": 2.9268264770507812,
+      "e2e_latency_ms": 2.9268264770507812,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 228.0
+    },
+    {
+      "vehicle_id": "d2_32",
+      "prediction_step": 911,
+      "ade": 79.45975951023414,
+      "fde": 141.45786490304826,
+      "inference_latency_ms": 2.769947052001953,
+      "e2e_latency_ms": 2.7709007263183594,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 228.0
+    },
+    {
+      "vehicle_id": "d2_57",
+      "prediction_step": 911,
+      "ade": 117.96362867126632,
+      "fde": 172.6724636930802,
+      "inference_latency_ms": 2.6590824127197266,
+      "e2e_latency_ms": 2.6602745056152344,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 228.0
+    },
+    {
+      "vehicle_id": "d2_68",
+      "prediction_step": 911,
+      "ade": 119.51914506728971,
+      "fde": 175.38209481559753,
+      "inference_latency_ms": 2.99072265625,
+      "e2e_latency_ms": 2.991914749145508,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 228.0
+    },
+    {
+      "vehicle_id": "d2_77",
+      "prediction_step": 911,
+      "ade": 117.89986764579567,
+      "fde": 172.46113640440646,
+      "inference_latency_ms": 2.746105194091797,
+      "e2e_latency_ms": 2.746105194091797,
+      "num_gt_frames": 8,
+      "prediction_timestamp": 228.0
+    }
+  ]
+}
